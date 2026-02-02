@@ -1,0 +1,30 @@
+{
+  "name": "alpine-vector-minds",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "concurrently -n db,api,web -c blue,green,yellow \"pnpm dev:db\" \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev:db": "docker compose -f docker-compose.dev.yml up",
+    "dev:api": "cd apps/api && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:web": "turbo dev --filter=web",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "test:api": "cd apps/api && uv run pytest",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "clean": "turbo clean && rm -rf node_modules",
+    "db:migrate": "cd apps/api && uv run alembic upgrade head",
+    "db:makemigrations": "cd apps/api && uv run alembic revision --autogenerate -m",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "prettier": "^3.2.5",
+    "turbo": "^2.3.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
