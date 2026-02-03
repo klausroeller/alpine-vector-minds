@@ -20,12 +20,6 @@ uv run ruff format .
 
 # Run type checking
 uv run mypy src
-
-# Create database migration
-uv run alembic revision --autogenerate -m "description"
-
-# Apply migrations
-uv run alembic upgrade head
 ```
 
 ## API Documentation

@@ -1,17 +1,17 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.health import router as health_router
-from src.api.v1 import router as v1_router
-from src.core.config import settings
-from src.core.database import engine
+from api.core.config import settings
+from api.health import router as health_router
+from api.v1 import router as v1_router
+from vector_db.database import engine
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Startup
     yield
     # Shutdown

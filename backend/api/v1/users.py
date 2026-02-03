@@ -1,18 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.v1.auth import get_current_user
-from src.core.database import get_db
-from src.core.security import get_password_hash
-from src.models.user import User
+from api.core.security import get_password_hash
+from api.v1.auth import get_current_user
+from vector_db.database import get_db
+from vector_db.models.user import User
 
 router = APIRouter()
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     full_name: str | None = None
 

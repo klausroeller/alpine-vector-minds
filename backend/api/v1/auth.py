@@ -7,10 +7,10 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.config import settings
-from src.core.database import get_db
-from src.core.security import create_access_token, verify_password
-from src.models.user import User
+from api.core.config import settings
+from api.core.security import create_access_token, verify_password
+from vector_db.database import get_db
+from vector_db.models.user import User
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/token")
@@ -40,7 +40,7 @@ async def get_current_user(
         if user_id is None:
             raise credentials_exception
     except JWTError:
-        raise credentials_exception
+        raise credentials_exception from None
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
