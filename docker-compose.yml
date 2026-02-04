@@ -18,8 +18,8 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.api
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: alpine-api
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/alpine_vector_minds
@@ -31,12 +31,14 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./apps/api/src:/app/src:ro
+      - ./backend/api:/app/api:ro
+      - ./backend/vector_db:/app/vector_db:ro
+      - ./backend/agents:/app/agents:ro
 
   web:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.web
+      context: ./frontend
+      dockerfile: web/Dockerfile
     container_name: alpine-web
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
