@@ -13,9 +13,6 @@ A full-stack monorepo template for AI-powered applications.
 ## Quick Start
 
 ```bash
-# Install dependencies
-make install
-
 # Copy environment file
 cp .env.example .env
 
@@ -25,8 +22,8 @@ make dev
 
 This starts:
 - PostgreSQL with pgvector on `:5432`
-- FastAPI backend on `:8000` (with hot reload)
-- Next.js frontend on `:3000` (with hot reload)
+- FastAPI backend on `:8000`
+- Next.js frontend on `:3000`
 
 Access the API docs at http://localhost:8000/docs once running.
 
@@ -57,28 +54,8 @@ Access the API docs at http://localhost:8000/docs once running.
 ## Development Commands
 
 ```bash
-# Using make (recommended)
-make install      # Install all dependencies
-make dev          # Start all services with hot reload
-make dev-db       # Start database only
-make dev-api      # Start API only
-make dev-web      # Start frontend only
-make docker       # Start all in Docker containers
-make test         # Run all tests
-make lint         # Lint all code
-make clean        # Clean build artifacts
-
-# Using pnpm directly
-pnpm dev          # Start all services
-pnpm dev:db       # Start database only
-pnpm dev:api      # Start API only
-pnpm dev:web      # Start frontend only
-pnpm test         # Run all tests
-pnpm lint         # Run linters
-
-# Docker
-pnpm docker:up    # Start full stack in Docker
-pnpm docker:down  # Stop containers
+make install      # Install all dependencies (frontend + backend)
+make dev          # Start all services in Docker
 ```
 
 ## API Endpoints

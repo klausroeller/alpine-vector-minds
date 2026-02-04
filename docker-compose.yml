@@ -37,8 +37,8 @@ services:
 
   web:
     build:
-      context: ./frontend/web
-      dockerfile: Dockerfile
+      context: ./frontend
+      dockerfile: web/Dockerfile
     container_name: alpine-web
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
