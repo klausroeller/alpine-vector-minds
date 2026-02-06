@@ -1,0 +1,14 @@
+# Initial HTTP-only config for certbot certificate acquisition
+server {
+    listen 80;
+    server_name alpine-vector-minds.de www.alpine-vector-minds.de;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 200 'Alpine Vector Minds - Setting up SSL...';
+        add_header Content-Type text/plain;
+    }
+}

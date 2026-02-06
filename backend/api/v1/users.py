@@ -4,9 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.security import get_password_hash
-from api.v1.auth import get_current_user
+from api.v1.auth import get_current_admin_user, get_current_user
 from vector_db.database import get_db
-from vector_db.models.user import User
+from vector_db.models.user import User, UserRole
 
 router = APIRouter()
 
@@ -22,6 +22,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str | None
     is_active: bool
+    role: str
 
     model_config = {"from_attributes": True}
 
@@ -42,6 +43,7 @@ async def create_user(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
         full_name=user_in.full_name,
+        role=UserRole.USER,
     )
     db.add(user)
     await db.flush()
@@ -54,3 +56,12 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_user),
 ) -> User:
     return current_user
+
+
+@router.get("/", response_model=list[UserResponse])
+async def list_users(
+    _admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[User]:
+    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    return list(result.scalars().all())

@@ -15,6 +15,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!frontend/web/src/lib/
 lib64/
 parts/
 sdist/
@@ -129,6 +130,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.production
 */.venv
 env/
 venv/
@@ -207,3 +209,16 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+*.tfvars
+*.pem
+
+# SSL / Certbot
+certbot/
+
+# Backups
+backups/
