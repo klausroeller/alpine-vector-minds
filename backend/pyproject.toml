@@ -58,3 +58,10 @@ pythonpath = ["."]
 [tool.mypy]
 python_version = "3.13"
 strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "jose.*",
+    "passlib.*",
+]
+ignore_missing_imports = true
