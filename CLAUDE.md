@@ -25,7 +25,7 @@ See [README.md](README.md) for full project documentation including:
 
 ## Tech Stack Quick Reference
 
-- **Backend**: Python 3.13, FastAPI, SQLAlchemy 2.0, Alembic, pytest, Ruff
+- **Backend**: Python 3.13, FastAPI, SQLAlchemy 2.0, pytest, Ruff
 - **Frontend**: Next.js 15, TypeScript, Tailwind CSS, shadcn/ui, Lucide
 - **Database**: PostgreSQL 16 with pgvector
 - **Package Managers**: uv (Python), pnpm (Node.js)
@@ -62,6 +62,20 @@ Brief one-line description of the change.
 - `backend/api/` - Description of API changes
 - `frontend/web/` - Description of frontend changes
 ```
+
+## Reproducibility
+
+**All changes must be fully reproducible from the repository.**
+
+- Never make manual, one-off changes to infrastructure, cloud accounts (e.g., AWS), databases, or services
+- Every action must be captured in code: scripts, Terraform, Makefile targets, Docker configs, etc.
+- If a change requires a new command or process, add it to the `Makefile`, a script, or the appropriate IaC tool — so that anyone can re-run it from scratch
+- The goal is a reliable production system where the entire environment can be torn down and rebuilt from the repo alone
+
+## Makefile
+
+- **Always update the `Makefile`** when adding new commands, scripts, or repeatable tasks
+- The `Makefile` is the single entry point for all development commands — keep it up to date
 
 ## Git Conventions
 
