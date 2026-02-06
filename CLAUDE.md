@@ -63,6 +63,13 @@ Brief one-line description of the change.
 - `frontend/web/` - Description of frontend changes
 ```
 
+## Python Virtual Environment
+
+- **Always use `uv run`** to execute Python commands (e.g., `uv run pytest`, `uv run ruff check .`)
+- **Never use bare `python` or `pip`** — all Python execution must go through `uv` to ensure the correct virtual environment and dependencies
+- Run `uv sync` from `backend/` to install or update dependencies
+- When adding new dependencies, add them to `backend/pyproject.toml` and run `uv sync` — do not use `pip install`
+
 ## Reproducibility
 
 **All changes must be fully reproducible from the repository.**
