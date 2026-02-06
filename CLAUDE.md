@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Philosophy
+
+**This is a hackathon project.** Prioritize speed and focus:
+- Fewer features that work flawlessly with a polished UI over many half-finished ones
+- Do not add new features at the cost of breaking or degrading existing ones
+- Every feature must be fully functional end-to-end before moving on to the next
+
 ## Project Overview
 
 See [README.md](README.md) for full project documentation including:
