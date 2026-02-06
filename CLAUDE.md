@@ -9,14 +9,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Do not add new features at the cost of breaking or degrading existing ones
 - Every feature must be fully functional end-to-end before moving on to the next
 
+## Documentation
+
+**Keeping documentation concise and up to date is essential.**
+
+- The `README.md` is the single source of truth — update it whenever features, APIs, or deployment steps change
+- Keep it focused on these sections: **Overall Scope**, **Backend**, **Frontend**, **Deployment**
+- Be concise: short descriptions, no filler. If something changed, update the docs in the same PR
+- Outdated documentation is worse than no documentation
+
 ## Project Overview
 
-See [README.md](README.md) for full project documentation including:
-- Project structure
-- Quick start guide
-- Development commands
-- API endpoints
-- Environment variables
+See [README.md](README.md) for full project documentation.
 
 ## Key Paths
 
