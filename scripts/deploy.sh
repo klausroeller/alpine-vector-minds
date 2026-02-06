@@ -24,7 +24,7 @@ rsync -avz --delete \
   --exclude '.venv' \
   --exclude '*.pem' \
   --exclude '.env' \
-  --exclude '.env.production' \
+  --exclude '.env.*' \
   --exclude 'certbot' \
   --exclude 'backups' \
   --exclude '.terraform' \
