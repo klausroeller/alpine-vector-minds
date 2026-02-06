@@ -83,6 +83,7 @@ Brief one-line description of the change.
 
 - **Always update the `Makefile`** when adding new commands, scripts, or repeatable tasks
 - The `Makefile` is the single entry point for all development commands — keep it up to date
+- **Never run scripts directly** (e.g., `./scripts/deploy.sh`) — always use the corresponding `make` target (e.g., `make deploy`). Makefile targets may include validation, environment setup, or parameter handling that scripts alone do not.
 
 ## Git Conventions
 
