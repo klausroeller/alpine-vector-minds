@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - The `README.md` is the single source of truth — update it whenever features, APIs, or deployment steps change
 - Keep it focused on these sections: **Overall Scope**, **Backend**, **Frontend**, **Deployment**
+- The README must always clearly explain: what the project does, the rough project structure, and enough context for someone new to get oriented quickly
 - Be concise: short descriptions, no filler. If something changed, update the docs in the same PR
 - Outdated documentation is worse than no documentation
 
