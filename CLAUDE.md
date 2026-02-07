@@ -105,6 +105,15 @@ Brief one-line description of the change.
 - Paths and endpoints should come from env vars or a central config module, not be scattered as string literals
 - Hardcoded values are tech debt — parametrize early to keep the codebase portable and maintainable
 
+## Analysis & Planning Artifacts
+
+**Preserve useful intermediate work from analysis and planning tasks.**
+
+- When performing long, detailed analysis or planning tasks that involve writing analysis scripts or producing intermediate results, **do not delete them afterwards**
+- Save the most important scripts, results, and findings as markdown files in `docs/` (e.g., `docs/analysis-<topic>.md`)
+- These artifacts are valuable context for human programmers — they document the reasoning, data, and conclusions behind decisions
+- **Never delete files in `docs/`** unless explicitly asked to by the user
+
 ## Git Conventions
 
 - **Do NOT use `Co-Authored-By:` tags** in commit messages
