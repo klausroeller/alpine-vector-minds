@@ -7,9 +7,9 @@ REMOTE_USER="ec2-user"
 REMOTE_DIR="/opt/app"
 ENV_FILE=".env.production"
 
-# Get host and key from terraform state (no manual args needed)
-EC2_IP=$(cd "$TF_DIR" && terraform output -raw ec2_public_ip)
-KEY_PATH="$TF_DIR/$(cd "$TF_DIR" && terraform output -raw private_key_path)"
+# Get host and key from env vars, falling back to terraform state
+EC2_IP=${EC2_IP:-$(cd "$TF_DIR" && terraform output -raw ec2_public_ip)}
+KEY_PATH=${KEY_PATH:-"$TF_DIR/$(cd "$TF_DIR" && terraform output -raw private_key_path)"}
 SSH_OPTS="-o StrictHostKeyChecking=no -i $KEY_PATH"
 
 echo "==> Deploying to $EC2_IP..."
