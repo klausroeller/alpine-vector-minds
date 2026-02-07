@@ -19,6 +19,7 @@ from vector_db.database import get_db
 from vector_db.models.kb_lineage import KBLineage
 from vector_db.models.knowledge_article import KnowledgeArticle
 from vector_db.models.script import Script
+from vector_db.models.ticket import Ticket
 from vector_db.models.user import User
 
 router = APIRouter()
@@ -138,6 +139,32 @@ async def get_knowledge_article(
                 tags=None,
                 created_at=script.created_at.isoformat(),
                 updated_at=script.updated_at.isoformat(),
+                lineage=[],
+            )
+
+    # Fall back to tickets table
+    if article_id.startswith("CS-"):
+        ticket_result = await db.execute(select(Ticket).where(Ticket.id == article_id))
+        ticket = ticket_result.scalar_one_or_none()
+        if ticket:
+            body_parts = []
+            if ticket.description:
+                body_parts.append(f"Description:\n{ticket.description}")
+            if ticket.resolution:
+                body_parts.append(f"Resolution:\n{ticket.resolution}")
+            if ticket.root_cause:
+                body_parts.append(f"Root Cause:\n{ticket.root_cause}")
+            return KBArticleDetailResponse(
+                id=ticket.id,
+                title=ticket.description or ticket.id,
+                body="\n\n".join(body_parts),
+                source_type="ticket",
+                status=ticket.status,
+                category=ticket.category,
+                module=ticket.module,
+                tags=ticket.tags,
+                created_at=ticket.created_at.isoformat(),
+                updated_at=ticket.updated_at.isoformat(),
                 lineage=[],
             )
 

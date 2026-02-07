@@ -42,7 +42,6 @@ export function ResultCard({ result, index, visible }: ResultCardProps) {
   const source = SOURCE_CONFIG[result.source_type] ?? SOURCE_CONFIG.kb_article;
   const Icon = source.icon;
   const similarityPct = Math.round(result.similarity_score * 100);
-  const hasDetailPage = result.source_type === 'kb_article' || result.source_type === 'script';
 
   return (
     <div
@@ -66,31 +65,23 @@ export function ResultCard({ result, index, visible }: ResultCardProps) {
                 <Icon className="h-3 w-3" />
                 {source.label}
               </Badge>
-              {hasDetailPage ? (
-                <Link
-                  href={`/knowledge/${result.source_id}`}
-                  className="font-mono text-[11px] text-teal-400/70 underline decoration-teal-400/30 transition-colors hover:text-teal-300 hover:decoration-teal-300"
-                >
-                  {result.source_id}
-                </Link>
-              ) : (
-                <span className="font-mono text-[11px] text-slate-500">{result.source_id}</span>
-              )}
+              <Link
+                href={`/knowledge/${result.source_id}`}
+                className="font-mono text-[11px] text-teal-400/70 underline decoration-teal-400/30 transition-colors hover:text-teal-300 hover:decoration-teal-300"
+              >
+                {result.source_id}
+              </Link>
               {result.category && (
                 <span className="text-xs text-slate-600">{result.category}</span>
               )}
             </div>
 
-            {hasDetailPage ? (
-              <Link
-                href={`/knowledge/${result.source_id}`}
-                className="text-[15px] font-medium text-teal-300 underline decoration-teal-400/30 transition-colors hover:text-teal-200 hover:decoration-teal-300"
-              >
-                {result.title}
-              </Link>
-            ) : (
-              <p className="text-[15px] font-medium text-white">{result.title}</p>
-            )}
+            <Link
+              href={`/knowledge/${result.source_id}`}
+              className="text-[15px] font-medium text-teal-300 underline decoration-teal-400/30 transition-colors hover:text-teal-200 hover:decoration-teal-300"
+            >
+              {result.title}
+            </Link>
 
             {/* Similarity bar */}
             <div className="mt-3 flex items-center gap-3">

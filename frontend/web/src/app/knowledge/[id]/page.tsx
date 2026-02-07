@@ -24,6 +24,10 @@ const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
     label: 'Script',
     className: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
   },
+  ticket: {
+    label: 'Ticket',
+    className: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  },
 };
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
@@ -38,6 +42,22 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   ARCHIVED: {
     label: 'Archived',
     className: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+  },
+  resolved: {
+    label: 'Resolved',
+    className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  },
+  closed: {
+    label: 'Closed',
+    className: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+  },
+  open: {
+    label: 'Open',
+    className: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+  },
+  in_progress: {
+    label: 'In Progress',
+    className: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   },
 };
 
