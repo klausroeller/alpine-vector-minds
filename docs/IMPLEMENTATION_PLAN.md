@@ -9,16 +9,13 @@
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
-2. [Team Structure & Responsibilities](#2-team-structure--responsibilities)
-3. [Database Team](#3-database-team)
-4. [Backend API Team](#4-backend-api-team)
-5. [AI Agents Team](#5-ai-agents-team)
-6. [Frontend Team](#6-frontend-team)
-7. [Data Import Pipeline](#7-data-import-pipeline)
-8. [Integration Points & Contracts](#8-integration-points--contracts)
-9. [Development Order & Dependencies](#9-development-order--dependencies)
-10. [Environment & Configuration](#10-environment--configuration)
-11. [Demo Script](#11-demo-script)
+2. [Team Structure](#2-team-structure)
+3. [Phase 1 — Foundation (Database + Data Pipeline)](#3-phase-1--foundation)
+4. [Phase 2 — Parallel Tracks (Backend API + AI Agents + Frontend)](#4-phase-2--parallel-tracks)
+5. [Phase 3 — Integration & Polish](#5-phase-3--integration--polish)
+6. [Environment & Configuration](#6-environment--configuration)
+7. [Demo Script](#7-demo-script)
+8. [Appendix: Evaluation Criteria Mapping](#appendix-evaluation-criteria-mapping)
 
 ---
 
@@ -44,7 +41,7 @@ A **self-learning support intelligence layer** with two hero features:
                                     │  ┌────┴─────┐ ┌─────┴─────┐ │
                                     │  │ Learning │ │ Dashboard │ │
                                     │  │ Feed Page│ │   Page    │ │
-                                    │  └────┬─────┘ └─────┬─────┘ │
+                                    │  └────┬─────┘ └─────┴─────┘ │
                                     └───────┼─────────────┼───────┘
                                             │  REST API   │
                                     ┌───────┼─────────────┼───────┐
@@ -90,34 +87,40 @@ A **self-learning support intelligence layer** with two hero features:
 
 ---
 
-## 2. Team Structure & Responsibilities
+## 2. Team Structure
 
 | Team | Scope | Key Files |
 |------|-------|-----------|
-| **Database** | Schema, models, migrations, data import script | `backend/vector_db/models/`, `backend/scripts/` |
+| **Database** | Schema, models, data import, embeddings | `backend/vector_db/models/`, `backend/scripts/` |
 | **Backend API** | FastAPI routes, Pydantic schemas, endpoint logic | `backend/api/v1/` |
-| **AI Agents** | LLM agents, RAG pipeline, vector search functions | `backend/agents/`, `backend/vector_db/` |
+| **AI Agents** | LLM agents, RAG pipeline, vector search functions | `backend/agents/`, `backend/vector_db/search.py` |
 | **Frontend** | Next.js pages, components, API client extensions | `frontend/web/src/` |
 
 ### Cross-Team Dependencies
 
 ```
-Database ──────► Backend API ──────► Frontend
-    │                 │
-    └──► AI Agents ───┘
+Phase 1: Database ──────────────────────────────────── (blocks everything)
+                    │
+Phase 2:            ├──► Backend API (CRUD endpoints)
+                    ├──► AI Agents (vector search + LLM agents)
+                    └──► Frontend (pages with mock/real data)
+                              │
+Phase 3:                      └──► Wire together + Polish
 ```
-
-- **Database** is the foundation — everyone depends on the models being defined first.
-- **AI Agents** and **Backend API** can work in parallel once models exist. The API team can stub agent calls.
-- **Frontend** can start immediately using the API contracts defined below. Mock the endpoints locally if needed.
 
 ---
 
-## 3. Database Team
+## 3. Phase 1 — Foundation
 
-### 3.1 New SQLAlchemy Models
+**Who**: Database team (or done together as one session)
+**Goal**: Database models created, data imported, embeddings generated, vector indexes built.
+**Milestone**: `make seed` populates the full database with 3,207 KB articles, 714 scripts, 400 tickets, 1,000 questions — all with vector embeddings.
 
-All models go in `backend/vector_db/models/`. Follow the existing `user.py` pattern: SQLAlchemy 2.0 Mapped types, UUID primary keys, timezone-aware timestamps.
+> This phase **blocks everything else**. Without data in the DB, agents can't search and APIs return nothing. This is the critical path.
+
+### 3.1 SQLAlchemy Models
+
+All models go in `backend/vector_db/models/`. Follow the existing `user.py` pattern: SQLAlchemy 2.0 Mapped types, timezone-aware timestamps.
 
 **Important**: After creating each model file, import it in `backend/vector_db/models/__init__.py` so `Base.metadata.create_all()` picks it up.
 
@@ -466,12 +469,52 @@ async with engine.begin() as conn:
     await conn.run_sync(Base.metadata.create_all)
 ```
 
-### 3.4 IVFFlat Index Creation
+### 3.4 Data Import Script
 
-IVFFlat indexes should be created **after** data import (they need data to build the index). Create a script `backend/scripts/create_vector_indexes.py`:
+**File**: `backend/scripts/import_data.py`
+
+A CLI script that reads the Excel workbook and populates the database.
+
+**Steps**:
+1. Read each sheet using `openpyxl` or `pandas`
+2. Insert rows into corresponding tables in dependency order:
+   - `placeholders` (no FK deps)
+   - `knowledge_articles` (from `Knowledge_Articles` sheet — it contains all 3,207 articles)
+   - `scripts` (from `Scripts_Master`)
+   - `tickets` (FK to knowledge_articles and scripts)
+   - `conversations` (FK to tickets)
+   - `questions` (polymorphic target_id — no real FK)
+   - `kb_lineage` (FK to knowledge_articles)
+   - `learning_events` (FK to tickets and knowledge_articles)
+3. Deduplicate knowledge articles: Use the `Knowledge_Articles` sheet as the source of truth (3,207 rows). Ignore `Existing_Knowledge_Articles` — it's a subset (3,046 rows).
+
+**Dependency**: Add `openpyxl>=3.1.0` to `backend/pyproject.toml`, then run `cd backend && uv sync`.
+
+### 3.5 Embedding Generation Script
+
+**File**: `backend/scripts/generate_embeddings.py`
+
+A CLI script that generates embeddings for all embeddable content.
+
+**Steps**:
+1. Fetch all KB articles without embeddings
+2. For each article: embed `title + "\n" + body` (concatenated)
+3. Batch process (OpenAI supports batches of up to 2048 texts)
+4. Update the `embedding` column
+5. Repeat for scripts (embed `title + "\n" + script_text`)
+6. Repeat for questions (embed `question_text`)
+
+**Estimated cost**: ~6,000 texts * ~500 tokens avg = ~3M tokens. At $0.02/1M tokens for text-embedding-3-small = **~$0.06 total**.
+
+**Batch strategy**: Process in batches of 100 to avoid rate limits. Estimated time: ~2 minutes.
+
+### 3.6 IVFFlat Index Creation
+
+IVFFlat indexes should be created **after** embedding generation (they need data to build the index).
+
+**File**: `backend/scripts/create_vector_indexes.py`
 
 ```sql
--- Run after data import and embedding generation
 CREATE INDEX IF NOT EXISTS idx_kb_articles_embedding
     ON knowledge_articles USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 80);
@@ -487,15 +530,70 @@ CREATE INDEX IF NOT EXISTS idx_questions_embedding
 
 Formula: `lists = max(1, sqrt(num_rows))`. KB: sqrt(3207)=57 → round up to 80. Scripts: sqrt(714)=27. Questions: sqrt(1000)=32.
 
+### 3.7 Makefile Targets
+
+```makefile
+# ─── Data ──────────────────────────────────────────────────
+
+import-data:
+	cd backend && uv run python -m scripts.import_data
+
+generate-embeddings:
+	cd backend && uv run python -m scripts.generate_embeddings
+
+create-vector-indexes:
+	cd backend && uv run python -m scripts.create_vector_indexes
+
+seed: import-data generate-embeddings create-vector-indexes
+```
+
+### 3.8 Phase 1 Checklist
+
+- [ ] Create all 8 model files in `backend/vector_db/models/`
+- [ ] Update `__init__.py` with all model imports
+- [ ] Add pgvector extension creation to `api/main.py` lifespan
+- [ ] Add `openpyxl` dependency to `pyproject.toml`
+- [ ] Write `import_data.py` and run it
+- [ ] Write `generate_embeddings.py` and run it
+- [ ] Write `create_vector_indexes.py` and run it
+- [ ] Add Makefile targets
+- [ ] Verify: `make seed` runs end-to-end, all tables populated
+
 ---
 
-## 4. Backend API Team
+## 4. Phase 2 — Parallel Tracks
 
-### 4.1 New Route Modules
+**Who**: Backend API, AI Agents, and Frontend teams — all working simultaneously.
+**Prerequisite**: Phase 1 complete (data in database with embeddings).
 
-All routes go in `backend/api/v1/`. Follow the existing pattern from `users.py`: Pydantic request/response schemas, async handlers, dependency injection for auth and DB.
+The three tracks can run **fully in parallel**:
 
-#### Route Registration
+```
+┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│   BACKEND API TRACK  │  │   AI AGENTS TRACK    │  │   FRONTEND TRACK     │
+│                      │  │                      │  │                      │
+│ CRUD endpoints:      │  │ VectorSearchService  │  │ Shared nav layout    │
+│  /knowledge (list,   │  │ TriageAgent          │  │ Copilot page         │
+│   detail)            │  │ GapDetectionAgent    │  │ Knowledge Base page  │
+│  /learning/events    │  │ KBGenerationAgent    │  │ Learning Feed page   │
+│  /learning/review    │  │                      │  │ Dashboard page       │
+│  /dashboard/metrics  │  │                      │  │ API client types     │
+│                      │  │                      │  │                      │
+│ NO agent dependency  │  │ Needs data in DB     │  │ Can use mock data    │
+│ Pure DB queries      │  │ Needs OpenAI API key │  │ until APIs are ready │
+└──────────────────────┘  └──────────────────────┘  └──────────────────────┘
+```
+
+**Key insight**: The `/knowledge`, `/learning/events`, `/learning/review`, and `/dashboard` endpoints are **pure CRUD** — they don't need AI agents. Only `/copilot/ask` and `/learning/detect-gap` depend on agents. So the Backend API and AI Agents tracks are truly independent.
+
+---
+
+### 4A. Backend API Track
+
+**Owner**: Backend API team
+**Files**: `backend/api/v1/`
+
+#### 4A.1 Route Registration
 
 Update `backend/api/v1/__init__.py`:
 
@@ -508,146 +606,38 @@ router.include_router(learning.router, prefix="/learning", tags=["learning"])
 router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 ```
 
----
+#### 4A.2 Pydantic Schema Files
 
-#### `backend/api/v1/copilot.py` — Triage Copilot
+Create `backend/api/v1/schemas/` directory:
 
-**POST `/api/v1/copilot/ask`** — Main triage endpoint
-
-Request:
-```json
-{
-    "question": "Date advance fails because a backend voucher reference is invalid..."
-}
+```
+backend/api/v1/schemas/
+├── __init__.py
+├── copilot.py      # CopilotAskRequest, CopilotAskResponse, etc.
+├── knowledge.py    # KBArticleListResponse, KBArticleDetailResponse, etc.
+├── learning.py     # LearningEventResponse, DetectGapRequest, ReviewRequest, etc.
+└── dashboard.py    # DashboardMetricsResponse
 ```
 
-Response:
-```json
-{
-    "classification": {
-        "answer_type": "SCRIPT",
-        "confidence": 0.92,
-        "reasoning": "Question describes a backend data fix scenario requiring Tier 3 script"
-    },
-    "results": [
-        {
-            "rank": 1,
-            "source_type": "SCRIPT",
-            "source_id": "SCRIPT-0293",
-            "title": "Accounting / Date Advance - Advance Property Date",
-            "content_preview": "use <DATABASE>\ngo\n-- <SITE_NAME>...",
-            "similarity_score": 0.94,
-            "category": "Advance Property Date",
-            "placeholders": ["<DATABASE>", "<SITE_NAME>", "<ID>"],
-            "provenance": null
-        },
-        {
-            "rank": 2,
-            "source_type": "KB",
-            "source_id": "KB-SYN-0042",
-            "title": "Resolving Date Advance Backend Data Sync Issues",
-            "content_preview": "When a date advance fails due to...",
-            "similarity_score": 0.87,
-            "category": "Advance Property Date",
-            "placeholders": null,
-            "provenance": {
-                "created_from_ticket": "CS-38908386",
-                "created_from_conversation": "CONV-O2RAK1VRJN",
-                "references_script": "SCRIPT-0293"
-            }
-        }
-    ],
-    "metadata": {
-        "search_time_ms": 45,
-        "total_candidates": 3207,
-        "model_used": "gpt-5"
-    }
-}
-```
+#### 4A.3 Shared Constants
 
-Pydantic schemas:
+Create `backend/api/core/constants.py`:
 
 ```python
-class CopilotAskRequest(BaseModel):
-    question: str
+# Similarity thresholds
+KB_GAP_THRESHOLD = 0.85           # Below this = gap detected
+SEARCH_RESULT_LIMIT = 5           # Default top-k results
+CONTENT_PREVIEW_LENGTH = 500      # Chars to show in previews
 
-class Classification(BaseModel):
-    answer_type: str          # SCRIPT | KB | TICKET_RESOLUTION
-    confidence: float
-    reasoning: str
-
-class ProvenanceInfo(BaseModel):
-    created_from_ticket: str | None = None
-    created_from_conversation: str | None = None
-    references_script: str | None = None
-
-class SearchResult(BaseModel):
-    rank: int
-    source_type: str
-    source_id: str
-    title: str
-    content_preview: str      # First 500 chars
-    similarity_score: float
-    category: str | None
-    placeholders: list[str] | None = None  # For scripts only
-    provenance: ProvenanceInfo | None = None  # For synth KB only
-
-class CopilotAskResponse(BaseModel):
-    classification: Classification
-    results: list[SearchResult]
-    metadata: dict[str, Any]
+# Embedding config
+EMBEDDING_TEXT_SEPARATOR = "\n"   # Separator for title+body concatenation
 ```
 
-**Implementation logic**:
-1. Call `TriageAgent` to classify the question → get `answer_type`
-2. Embed the question using `EmbeddingService`
-3. Run vector similarity search against the classified pool (scripts, KB articles, or tickets)
-4. Also search secondary pools for supplementary results
-5. For each KB result with `source_type=SYNTH_FROM_TICKET`, fetch provenance from `kb_lineage`
-6. For each script result, extract placeholder tokens from the text
-7. Return top-5 results ranked by similarity
-
----
-
-**GET `/api/v1/copilot/evaluate`** — Run accuracy evaluation against ground truth
-
-Response:
-```json
-{
-    "total_questions": 1000,
-    "classification_accuracy": 0.89,
-    "retrieval_accuracy": {
-        "hit_at_1": 0.72,
-        "hit_at_3": 0.85,
-        "hit_at_5": 0.91
-    },
-    "by_answer_type": {
-        "SCRIPT": { "count": 700, "hit_at_1": 0.75, "hit_at_3": 0.88 },
-        "KB": { "count": 209, "hit_at_1": 0.68, "hit_at_3": 0.82 },
-        "TICKET_RESOLUTION": { "count": 91, "hit_at_1": 0.61, "hit_at_3": 0.76 }
-    },
-    "evaluated_at": "2026-02-07T15:30:00Z"
-}
-```
-
-**Implementation logic**:
-1. Iterate through all questions in DB
-2. For each: embed question → search the appropriate pool → check if `target_id` appears in top-k results
-3. Aggregate accuracy metrics
-4. This is an admin-only, long-running endpoint. Consider running async and caching results.
-
----
-
-#### `backend/api/v1/knowledge.py` — Knowledge Base
+#### 4A.4 `/knowledge` — Knowledge Base (CRUD, no agents)
 
 **GET `/api/v1/knowledge/`** — List/search KB articles
 
-Query params:
-- `search` (optional): Text search / filter
-- `source_type` (optional): `SEED_KB` | `SYNTH_FROM_TICKET`
-- `category` (optional): Filter by category
-- `status` (optional): `Active` | `Draft` | `Archived`
-- `page` (default 1), `page_size` (default 20)
+Query params: `search`, `source_type`, `category`, `status`, `page` (default 1), `page_size` (default 20)
 
 Response:
 ```json
@@ -707,19 +697,13 @@ Response:
 }
 ```
 
-**Implementation logic**:
-- List endpoint: Standard paginated query with filters. For text search, use `ILIKE` on title/body (or vector search if search term is long).
-- Detail endpoint: Fetch article + LEFT JOIN kb_lineage + lookup source summaries from tickets/conversations/scripts.
+**Implementation**: Standard paginated query with filters. Detail endpoint: fetch article + LEFT JOIN kb_lineage + lookup source summaries.
 
----
-
-#### `backend/api/v1/learning.py` — Learning Loop
+#### 4A.5 `/learning` — Learning Loop (mostly CRUD, agents only for detect-gap)
 
 **GET `/api/v1/learning/events`** — List learning events
 
-Query params:
-- `status` (optional): `Pending` | `Approved` | `Rejected`
-- `page`, `page_size`
+Query params: `status` (optional), `page`, `page_size`
 
 Response:
 ```json
@@ -744,42 +728,7 @@ Response:
 }
 ```
 
-**POST `/api/v1/learning/detect-gap`** — Trigger gap detection for a ticket
-
-Request:
-```json
-{
-    "ticket_id": "CS-38908386"
-}
-```
-
-Response:
-```json
-{
-    "gap_detected": true,
-    "learning_event_id": "LEARN-NEW-001",
-    "detected_gap": "No existing KB match above 0.85 threshold...",
-    "proposed_article": {
-        "id": "KB-SYN-NEW-001",
-        "title": "Auto-generated: Resolving Date Advance...",
-        "body": "Generated article content...",
-        "status": "Draft"
-    }
-}
-```
-
-**Implementation logic**:
-1. Fetch the ticket + its conversation + its script (if any)
-2. Embed the ticket description + resolution
-3. Search existing KB for a match above similarity threshold (0.85)
-4. If no match → call `GapDetectionAgent` to confirm the gap
-5. Call `KBGenerationAgent` to generate a draft article
-6. Save the draft KB article (status=Draft, source_type=SYNTH_FROM_TICKET)
-7. Create lineage records linking the new article to ticket + conversation + script
-8. Create a learning event (status=Pending)
-9. Return the event
-
-**POST `/api/v1/learning/review/{event_id}`** — Approve or reject a learning event
+**POST `/api/v1/learning/review/{event_id}`** — Approve or reject (CRUD, no agents)
 
 Request:
 ```json
@@ -799,16 +748,33 @@ Response:
 }
 ```
 
-**Implementation logic**:
+**Implementation**:
 1. Update learning event status
 2. If approved: set proposed KB article status to `Active`, generate embedding, make it searchable
 3. If rejected: set proposed KB article status to `Archived`
 
----
+**POST `/api/v1/learning/detect-gap`** — **(Depends on AI Agents track)** — Stub initially, wire up in Phase 3
 
-#### `backend/api/v1/dashboard.py` — Metrics Dashboard
+Request: `{ "ticket_id": "CS-38908386" }`
 
-**GET `/api/v1/dashboard/metrics`** — Aggregated metrics
+Response:
+```json
+{
+    "gap_detected": true,
+    "learning_event_id": "LEARN-NEW-001",
+    "detected_gap": "No existing KB match above 0.85 threshold...",
+    "proposed_article": {
+        "id": "KB-SYN-NEW-001",
+        "title": "Auto-generated: Resolving Date Advance...",
+        "body": "Generated article content...",
+        "status": "Draft"
+    }
+}
+```
+
+#### 4A.6 `/dashboard` — Metrics (CRUD, no agents)
+
+**GET `/api/v1/dashboard/metrics`**
 
 Response:
 ```json
@@ -852,47 +818,91 @@ Response:
 }
 ```
 
-**Implementation logic**: Straightforward aggregate queries with `func.count()`, `GROUP BY`, etc.
+**Implementation**: Aggregate queries with `func.count()`, `GROUP BY`, etc.
+
+#### 4A.7 `/copilot` — **(Depends on AI Agents track)** — Stub initially, wire up in Phase 3
+
+**POST `/api/v1/copilot/ask`** — Main triage endpoint
+
+Request: `{ "question": "Date advance fails because..." }`
+
+Pydantic schemas:
+
+```python
+class CopilotAskRequest(BaseModel):
+    question: str
+
+class Classification(BaseModel):
+    answer_type: str          # SCRIPT | KB | TICKET_RESOLUTION
+    confidence: float
+    reasoning: str
+
+class ProvenanceInfo(BaseModel):
+    created_from_ticket: str | None = None
+    created_from_conversation: str | None = None
+    references_script: str | None = None
+
+class SearchResult(BaseModel):
+    rank: int
+    source_type: str
+    source_id: str
+    title: str
+    content_preview: str      # First 500 chars
+    similarity_score: float
+    category: str | None
+    placeholders: list[str] | None = None  # For scripts only
+    provenance: ProvenanceInfo | None = None  # For synth KB only
+
+class CopilotAskResponse(BaseModel):
+    classification: Classification
+    results: list[SearchResult]
+    metadata: dict[str, Any]
+```
+
+**GET `/api/v1/copilot/evaluate`** — Run accuracy evaluation (admin-only, long-running)
+
+Response:
+```json
+{
+    "total_questions": 1000,
+    "classification_accuracy": 0.89,
+    "retrieval_accuracy": {
+        "hit_at_1": 0.72,
+        "hit_at_3": 0.85,
+        "hit_at_5": 0.91
+    },
+    "by_answer_type": {
+        "SCRIPT": { "count": 700, "hit_at_1": 0.75, "hit_at_3": 0.88 },
+        "KB": { "count": 209, "hit_at_1": 0.68, "hit_at_3": 0.82 },
+        "TICKET_RESOLUTION": { "count": 91, "hit_at_1": 0.61, "hit_at_3": 0.76 }
+    },
+    "evaluated_at": "2026-02-07T15:30:00Z"
+}
+```
+
+#### 4A.8 Phase 2 Backend Checklist
+
+- [ ] Create `schemas/` directory with all Pydantic schemas
+- [ ] Create `constants.py`
+- [ ] Implement `/knowledge/` list + detail endpoints (CRUD)
+- [ ] Implement `/learning/events` list endpoint (CRUD)
+- [ ] Implement `/learning/review/{id}` endpoint (CRUD)
+- [ ] Implement `/dashboard/metrics` endpoint (CRUD)
+- [ ] Stub `/copilot/ask` and `/learning/detect-gap` (return mock data, will wire agents in Phase 3)
+- [ ] Register all routes in `__init__.py`
 
 ---
 
-### 4.2 Pydantic Schema Files
+### 4B. AI Agents Track
 
-Create `backend/api/v1/schemas/` directory with:
+**Owner**: AI Agents team
+**Files**: `backend/agents/`, `backend/vector_db/search.py`
 
-```
-backend/api/v1/schemas/
-├── __init__.py
-├── copilot.py      # CopilotAskRequest, CopilotAskResponse, etc.
-├── knowledge.py    # KBArticleListResponse, KBArticleDetailResponse, etc.
-├── learning.py     # LearningEventResponse, DetectGapRequest, ReviewRequest, etc.
-└── dashboard.py    # DashboardMetricsResponse
-```
-
-This keeps schemas separate from route logic, following a clean architecture pattern.
-
----
-
-## 5. AI Agents Team
-
-### 5.1 Overview
-
-All agents extend `BaseAgent` from `backend/agents/base.py`. Each agent uses OpenAI GPT-5 for LLM calls and `EmbeddingService` for vector operations.
-
-```
-backend/agents/
-├── base.py            # Existing abstract base class
-├── triage.py          # TriageAgent — classify + retrieve
-├── gap_detection.py   # GapDetectionAgent — detect knowledge gaps
-├── kb_generation.py   # KBGenerationAgent — generate KB articles
-└── qa_scoring.py      # QAScoringAgent — score interaction quality (stretch)
-```
-
-### 5.2 Vector Search Service
-
-Before building agents, create a reusable vector search service.
+#### 4B.1 Vector Search Service
 
 **File**: `backend/vector_db/search.py`
+
+Build this first — all agents depend on it.
 
 ```python
 class VectorSearchService:
@@ -926,11 +936,6 @@ class VectorSearchService:
         limit: int = 5,
     ) -> list[dict]:
         """Search tickets by embedding on resolution text."""
-        # Note: Tickets don't have embeddings in the schema above.
-        # For ticket search, embed the resolution field at query time
-        # OR add an embedding column to tickets.
-        # Decision: For simplicity, search tickets by embedding their
-        # description+resolution at import time. Add embedding column to Ticket model.
 
     async def search_all(
         self,
@@ -952,15 +957,24 @@ class VectorSearchService:
 - Return dicts with `id`, `title`, `content_preview`, `similarity_score`, `category`.
 - Accept an `AsyncSession` as parameter (injected from route).
 
----
+#### 4B.2 Agent File Structure
 
-### 5.3 TriageAgent
+```
+backend/agents/
+├── base.py            # Existing abstract base class
+├── triage.py          # TriageAgent — classify + retrieve
+├── gap_detection.py   # GapDetectionAgent — detect knowledge gaps
+├── kb_generation.py   # KBGenerationAgent — generate KB articles
+└── qa_scoring.py      # QAScoringAgent — score interaction quality (stretch goal)
+```
+
+All agents extend `BaseAgent`. Each agent uses OpenAI GPT-5 for LLM calls and `EmbeddingService` for vector operations.
+
+#### 4B.3 TriageAgent
 
 **File**: `backend/agents/triage.py`
 
-**Purpose**: Given a support question, classify its answer_type (SCRIPT/KB/TICKET_RESOLUTION) and retrieve the best matching resources.
-
-**Input**: `AgentMessage` with the user's question.
+**Purpose**: Classify a question's answer_type (SCRIPT/KB/TICKET_RESOLUTION) and retrieve the best matching resources.
 
 **Processing**:
 
@@ -986,15 +1000,11 @@ class VectorSearchService:
 
 **Output**: `AgentResponse` with content as JSON (classification + ranked results), metadata includes search_time_ms.
 
----
-
-### 5.4 GapDetectionAgent
+#### 4B.4 GapDetectionAgent
 
 **File**: `backend/agents/gap_detection.py`
 
 **Purpose**: Given a resolved ticket, determine if the resolution represents new knowledge not captured in the existing KB.
-
-**Input**: `AgentMessage` containing the ticket data (description, resolution, category, root_cause) + conversation transcript.
 
 **Processing**:
 
@@ -1015,17 +1025,11 @@ class VectorSearchService:
    Respond with JSON: {"gap_detected": true/false, "gap_description": "...", "suggested_title": "..."}
    ```
 
-**Output**: `AgentResponse` with gap detection result.
-
----
-
-### 5.5 KBGenerationAgent
+#### 4B.5 KBGenerationAgent
 
 **File**: `backend/agents/kb_generation.py`
 
 **Purpose**: Generate a draft KB article from a ticket + conversation + script.
-
-**Input**: `AgentMessage` containing the full ticket, conversation transcript, and script text (if applicable).
 
 **Processing**:
 
@@ -1050,43 +1054,37 @@ class VectorSearchService:
    Respond with JSON: {"title": "...", "body": "...", "category": "..."}
    ```
 
-**Output**: `AgentResponse` with the generated article content.
-
----
-
-### 5.6 QAScoringAgent (Stretch Goal)
+#### 4B.6 QAScoringAgent (Stretch Goal)
 
 **File**: `backend/agents/qa_scoring.py`
 
-**Purpose**: Score a conversation transcript using the QA rubric from the dataset.
+Score a conversation transcript using the QA rubric from the dataset (`QA_Evaluation_Prompt` tab). Implement only if time permits.
 
-The `QA_Evaluation_Prompt` tab in the dataset contains a detailed rubric. Use it as the system prompt for an LLM evaluator.
+#### 4B.7 Phase 2 Agents Checklist
 
-This is a **stretch goal** — implement only if time permits.
+- [ ] Implement `VectorSearchService` with real pgvector queries
+- [ ] Test vector search returns correct results for sample queries
+- [ ] Implement `TriageAgent` with LLM classification + vector search
+- [ ] Implement `GapDetectionAgent`
+- [ ] Implement `KBGenerationAgent`
+- [ ] Test full pipeline: question → classify → search → results
 
 ---
 
-## 6. Frontend Team
+### 4C. Frontend Track
 
-### 6.1 Overview
+**Owner**: Frontend team
+**Files**: `frontend/web/src/`
 
-All new pages are protected routes. Follow the existing dashboard page pattern: `ProtectedRoute` wrapper, card-based layout, teal/cyan accent colors on dark background.
+#### 4C.1 New Dependencies
 
-### 6.2 Navigation
+```bash
+cd frontend/web
+COREPACK_INTEGRITY_KEYS=0 pnpm add recharts
+COREPACK_INTEGRITY_KEYS=0 pnpm dlx shadcn@latest add badge tabs textarea separator skeleton scroll-area
+```
 
-Add a sidebar or top navigation that replaces the current minimal nav. Pages:
-
-| Route | Label | Icon (Lucide) |
-|-------|-------|---------------|
-| `/dashboard` | Dashboard | `LayoutDashboard` |
-| `/copilot` | Copilot | `MessageSquareText` |
-| `/knowledge` | Knowledge Base | `BookOpen` |
-| `/knowledge/[id]` | Article Detail | — |
-| `/learning` | Learning Feed | `Brain` |
-
-Create a shared layout component `frontend/web/src/components/layout/app-layout.tsx` that wraps all authenticated pages with consistent nav + sidebar.
-
-### 6.3 API Client Extensions
+#### 4C.2 API Client Extensions
 
 Add to `frontend/web/src/lib/api.ts`:
 
@@ -1174,59 +1172,37 @@ interface PaginatedResponse<T> {
   page_size: number;
 }
 
-interface DashboardMetrics {
-  knowledge_base: { ... };
-  learning: { ... };
-  tickets: { ... };
-  scripts: { ... };
-}
-
 // --- API Methods ---
 
 export const api = {
   // ... existing methods (login, register, getMe) ...
 
-  // Copilot
   copilotAsk: (question: string) =>
     request<CopilotResponse>('/api/v1/copilot/ask', {
       method: 'POST',
       body: JSON.stringify({ question }),
     }),
 
-  // Knowledge Base
   listKBArticles: (params?: {
-    search?: string;
-    source_type?: string;
-    category?: string;
-    status?: string;
-    page?: number;
-    page_size?: number;
+    search?: string; source_type?: string; category?: string;
+    status?: string; page?: number; page_size?: number;
   }) => {
     const query = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([k, v]) => {
-        if (v !== undefined) query.set(k, String(v));
-      });
-    }
-    return request<PaginatedResponse<KBArticleListItem>>(
-      `/api/v1/knowledge/?${query}`
-    );
+    if (params) Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined) query.set(k, String(v));
+    });
+    return request<PaginatedResponse<KBArticleListItem>>(`/api/v1/knowledge/?${query}`);
   },
 
   getKBArticle: (id: string) =>
     request<KBArticleDetail>(`/api/v1/knowledge/${id}`),
 
-  // Learning
   listLearningEvents: (params?: { status?: string; page?: number }) => {
     const query = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([k, v]) => {
-        if (v !== undefined) query.set(k, String(v));
-      });
-    }
-    return request<PaginatedResponse<LearningEvent>>(
-      `/api/v1/learning/events?${query}`
-    );
+    if (params) Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined) query.set(k, String(v));
+    });
+    return request<PaginatedResponse<LearningEvent>>(`/api/v1/learning/events?${query}`);
   },
 
   detectGap: (ticketId: string) =>
@@ -1241,121 +1217,75 @@ export const api = {
       body: JSON.stringify({ decision, reviewer_role: reviewerRole }),
     }),
 
-  // Dashboard
-  getDashboardMetrics: () =>
-    request<DashboardMetrics>('/api/v1/dashboard/metrics'),
+  getDashboardMetrics: () => request<any>('/api/v1/dashboard/metrics'),
 };
 ```
 
-### 6.4 Page Specifications
+#### 4C.3 Shared Navigation Layout
 
-#### Page 1: Copilot (`/copilot`)
+Create `frontend/web/src/components/layout/app-layout.tsx` — wraps all authenticated pages.
 
-**Layout**: Full-width. Large text area at top, results below.
+| Route | Label | Icon (Lucide) |
+|-------|-------|---------------|
+| `/dashboard` | Dashboard | `LayoutDashboard` |
+| `/copilot` | Copilot | `MessageSquareText` |
+| `/knowledge` | Knowledge Base | `BookOpen` |
+| `/learning` | Learning Feed | `Brain` |
 
-**Components**:
+#### 4C.4 Page Specifications
+
+**Page 1: Copilot (`/copilot`)**
+
+Layout: Full-width. Large text area at top, results below.
+
+Components:
 - **Search bar**: Large `<textarea>` with "Ask a question..." placeholder and Submit button
 - **Classification badge**: After response, show a colored badge: SCRIPT (purple), KB (blue), TICKET_RESOLUTION (amber) + confidence percentage
-- **Results list**: Cards for each result
-  - Card shows: rank, title, source_type badge, similarity score (as percentage bar), category tag
+- **Results list**: Cards for each result, showing rank, title, source_type badge, similarity score bar, category tag
   - Expandable: click to see `content_preview`
-  - For scripts: show placeholder tokens as small badges (e.g. `<DATABASE>`, `<SITE_NAME>`)
-  - For synth KB: show provenance chain as linked breadcrumb (Ticket → Conversation → Script)
+  - For scripts: show placeholder tokens as small badges
+  - For synth KB: show provenance chain as linked breadcrumb
 - **Loading state**: Animated skeleton cards while searching
 
-**Interactions**:
-1. User types/pastes question → clicks Submit (or Ctrl+Enter)
-2. System shows loading spinner with "Classifying and searching..."
-3. Results appear with classification badge and ranked results
-4. Click on a result to expand the full content
-5. Click on a source_id link to navigate to the detail page (KB article or script)
+**Page 2: Knowledge Base (`/knowledge`)**
 
-#### Page 2: Knowledge Base (`/knowledge`)
+Layout: Sidebar filters + main content area.
 
-**Layout**: Sidebar filters + main content area.
-
-**Components**:
-- **Filter sidebar**:
-  - Source type toggle: All | Seed KB | Auto-generated
-  - Category dropdown (14 categories from dataset)
-  - Status filter: Active | Draft | Archived
-  - Text search input
-- **Article list**: Card grid or table. Each row: title, source_type badge, category, created_at, version
+Components:
+- **Filter sidebar**: Source type toggle (All | Seed KB | Auto-generated), category dropdown, status filter, text search
+- **Article list**: Card grid or table with title, source_type badge, category, created_at, version
 - **Pagination**: Page navigation at bottom
 
-**Interactions**:
-1. Filters update the list via API query params
-2. Click article → navigate to `/knowledge/[id]`
-3. Source type "Auto-generated" badge shows a sparkle icon to distinguish AI-created content
+**Page 3: Article Detail (`/knowledge/[id]`)**
 
-#### Page 3: Article Detail (`/knowledge/[id]`)
+Layout: Full-width article view.
 
-**Layout**: Full-width article view.
-
-**Components**:
+Components:
 - **Article header**: Title, source_type badge, status badge, category, version, timestamps
 - **Article body**: Rendered as formatted text (preserve line breaks)
-- **Provenance section** (for synth articles only): Visual chain showing:
-  ```
-  Ticket CS-38908386 → Conversation CONV-O2RAK1VRJN → Script SCRIPT-0293
-  ```
-  Each node is clickable (shows a modal or navigates to detail)
-- **Version history** (stretch): Timeline of changes
+- **Provenance section** (synth articles only): Visual chain: Ticket → Conversation → Script
 
-#### Page 4: Learning Feed (`/learning`)
+**Page 4: Learning Feed (`/learning`)**
 
-**Layout**: Timeline / feed style.
+Layout: Timeline / feed style.
 
-**Components**:
+Components:
 - **Status filter tabs**: All | Pending | Approved | Rejected
-- **Event cards**: Each card shows:
-  - Status badge (Pending=yellow, Approved=green, Rejected=red)
-  - Trigger ticket subject + link
-  - Detected gap description
-  - Proposed article title + link
-  - Reviewer role + review date (if reviewed)
-- **Review actions** (for Pending events): Approve / Reject buttons → opens confirmation modal
-- **Pending count badge** on the tab and in nav
+- **Event cards**: Status badge, trigger ticket subject, detected gap description, proposed article title, reviewer info
+- **Review actions** (Pending events): Approve / Reject buttons → confirmation modal
 
-**Interactions**:
-1. Filter by status
-2. Click "Approve" → confirmation modal → POST review → update card status
-3. Click ticket link → modal showing ticket details
-4. Click article link → navigate to `/knowledge/[id]`
+**Page 5: Dashboard (`/dashboard`) — Redesign existing**
 
-#### Page 5: Dashboard (`/dashboard`) — Redesign existing
+Layout: Metric cards + charts.
 
-**Layout**: Metric cards + charts.
+Components:
+- **Summary cards** (4): Total KB Articles, Total Scripts, Learning Events, Approval Rate
+- **Charts**: KB by category (bar), tickets by priority (donut), tickets by root cause (donut)
+- **Tables**: Recent learning events, top categories by volume
 
-**Components**:
-- **Top row — Summary cards** (4 cards):
-  - Total KB Articles (with seed vs synth breakdown)
-  - Total Scripts
-  - Learning Events (with pending count highlighted)
-  - Approval Rate (as percentage)
-- **Middle row — Charts**:
-  - KB articles by category (bar chart)
-  - Tickets by priority (donut chart)
-  - Tickets by root cause (donut chart)
-  - Learning events over time (line chart, if timestamps available)
-- **Bottom row — Tables**:
-  - Recent learning events (last 10)
-  - Top categories by ticket volume
+Charts: Use `recharts` library.
 
-**Note**: Charts can use a lightweight library. Options:
-- `recharts` (React-native, most popular)
-- Raw SVG (minimal dependency)
-- Install: `pnpm add recharts`
-
-### 6.5 New Frontend Dependencies
-
-```bash
-cd frontend/web
-COREPACK_INTEGRITY_KEYS=0 pnpm add recharts
-COREPACK_INTEGRITY_KEYS=0 pnpm dlx shadcn@latest add badge tabs textarea separator skeleton scroll-area
-```
-
-### 6.6 File Structure
+#### 4C.5 File Structure
 
 ```
 frontend/web/src/
@@ -1377,7 +1307,7 @@ frontend/web/src/
 │   ├── layout/
 │   │   └── app-layout.tsx      # NEW — shared nav + sidebar
 │   ├── copilot/
-│   │   ├── search-bar.tsx      # NEW — question input
+│   │   ├── search-bar.tsx      # NEW
 │   │   ├── classification-badge.tsx  # NEW
 │   │   └── result-card.tsx     # NEW
 │   ├── knowledge/
@@ -1394,90 +1324,39 @@ frontend/web/src/
 ├── contexts/
 │   └── auth-context.tsx        # Existing
 └── lib/
-    ├── api.ts                  # MODIFY — add new API methods
+    ├── api.ts                  # MODIFY — add new API methods + types
     └── utils.ts                # Existing
 ```
 
----
+#### 4C.6 Phase 2 Frontend Checklist
 
-## 7. Data Import Pipeline
-
-### 7.1 Import Script
-
-**File**: `backend/scripts/import_data.py`
-
-A CLI script that reads the Excel workbook and populates the database.
-
-**Steps**:
-1. Read each sheet using `openpyxl` or `pandas`
-2. Insert rows into corresponding tables in dependency order:
-   - `placeholders` (no FK deps)
-   - `knowledge_articles` (from both `Knowledge_Articles` and `Existing_Knowledge_Articles` sheets)
-   - `scripts` (from `Scripts_Master`)
-   - `tickets` (FK to knowledge_articles and scripts)
-   - `conversations` (FK to tickets)
-   - `questions` (polymorphic target_id — no real FK)
-   - `kb_lineage` (FK to knowledge_articles)
-   - `learning_events` (FK to tickets and knowledge_articles)
-3. Deduplicate knowledge articles (the `Knowledge_Articles` sheet includes 3,046 from `Existing_Knowledge_Articles` + 161 synthetic = 3,207 total; `Existing_Knowledge_Articles` is a subset)
-
-**Deduplication strategy**: Use the `Knowledge_Articles` sheet as the source of truth (it contains all 3,207 articles). Ignore `Existing_Knowledge_Articles` — it's a subset.
-
-### 7.2 Embedding Generation Script
-
-**File**: `backend/scripts/generate_embeddings.py`
-
-A CLI script that generates embeddings for all embeddable content.
-
-**Steps**:
-1. Fetch all KB articles without embeddings
-2. For each article: embed `title + "\n" + body` (concatenated)
-3. Batch process (OpenAI supports batches of up to 2048 texts)
-4. Update the `embedding` column
-5. Repeat for scripts (embed `title + "\n" + script_text`)
-6. Repeat for questions (embed `question_text`)
-
-**Estimated cost**: ~6,000 texts * ~500 tokens avg = ~3M tokens. At $0.02/1M tokens for text-embedding-3-small = **~$0.06 total**.
-
-**Batch strategy**: Process in batches of 100 to avoid rate limits. Estimated time: ~2 minutes.
-
-### 7.3 Makefile Targets
-
-```makefile
-# ─── Data ──────────────────────────────────────────────────
-
-import-data:
-	cd backend && uv run python -m scripts.import_data
-
-generate-embeddings:
-	cd backend && uv run python -m scripts.generate_embeddings
-
-create-vector-indexes:
-	cd backend && uv run python -m scripts.create_vector_indexes
-
-seed: import-data generate-embeddings create-vector-indexes
-```
-
-### 7.4 Adding Dependencies
-
-Add `openpyxl` to `backend/pyproject.toml`:
-
-```toml
-dependencies = [
-    # ... existing deps ...
-    "openpyxl>=3.1.0",
-]
-```
-
-Then run `cd backend && uv sync`.
+- [ ] Install new dependencies (recharts, shadcn components)
+- [ ] Extend `api.ts` with all new types and methods
+- [ ] Create `app-layout.tsx` shared navigation
+- [ ] Create Copilot page with search bar and result cards
+- [ ] Create Knowledge Base list page with filters + pagination
+- [ ] Create Article Detail page with provenance chain
+- [ ] Create Learning Feed page with status tabs and event cards
+- [ ] Redesign Dashboard page with metric cards and charts
+- [ ] All pages work with mock data (or real CRUD endpoints if Backend is ready)
 
 ---
 
-## 8. Integration Points & Contracts
+## 5. Phase 3 — Integration & Polish
 
-### 8.1 Agent ↔ API Integration
+**Who**: All teams together.
+**Prerequisite**: Phase 2 tracks complete — CRUD endpoints working, agents working, frontend pages rendered.
+**Goal**: Wire agent-dependent endpoints, connect frontend to real APIs, run evaluation, prepare demo.
 
-The API layer calls agents as services. Each agent is instantiated and called with `await agent.run(messages)`.
+### 5.1 Wire Agent-Dependent Endpoints
+
+| Endpoint | Wire To |
+|----------|---------|
+| `POST /copilot/ask` | `TriageAgent` → classify → `VectorSearchService` → search → enrich with provenance |
+| `POST /learning/detect-gap` | `GapDetectionAgent` → detect gap → `KBGenerationAgent` → generate draft → save to DB |
+| `GET /copilot/evaluate` | Iterate questions → `TriageAgent` per question → compare with ground truth `target_id` |
+
+**Agent ↔ API integration pattern**:
 
 ```python
 # In copilot.py route handler
@@ -1487,103 +1366,64 @@ agent = TriageAgent(db=db, embedding_service=embedding_service, search_service=s
 response = await agent.run([AgentMessage(role="user", content=request.question)])
 ```
 
-Agents receive a DB session and services as constructor parameters (not through FastAPI Depends — agents aren't routes).
+Agents receive a DB session and services as constructor parameters (not through FastAPI Depends).
 
-### 8.2 Frontend ↔ Backend Contract
+**`/copilot/ask` full implementation logic**:
+1. Call `TriageAgent` to classify the question → get `answer_type`
+2. Embed the question using `EmbeddingService`
+3. Run vector similarity search against the classified pool (scripts, KB articles, or tickets)
+4. Also search secondary pools for supplementary results
+5. For each KB result with `source_type=SYNTH_FROM_TICKET`, fetch provenance from `kb_lineage`
+6. For each script result, extract placeholder tokens from the text
+7. Return top-5 results ranked by similarity
 
-The API contract (request/response JSON shapes) is defined in Section 4 above. Both teams should work against these contracts. If the backend isn't ready, the frontend can mock responses using local JSON files.
+**`/learning/detect-gap` full implementation logic**:
+1. Fetch the ticket + its conversation + its script (if any)
+2. Embed the ticket description + resolution
+3. Search existing KB for a match above similarity threshold (0.85)
+4. If no match → call `GapDetectionAgent` to confirm the gap
+5. Call `KBGenerationAgent` to generate a draft article
+6. Save the draft KB article (status=Draft, source_type=SYNTH_FROM_TICKET)
+7. Create lineage records linking the new article to ticket + conversation + script
+8. Create a learning event (status=Pending)
+9. Return the event
 
-### 8.3 Shared Constants
+### 5.2 Connect Frontend to Real APIs
 
-Create `backend/api/core/constants.py` for shared enums and constants:
+| Page | Replace Mock With |
+|------|-------------------|
+| Copilot | Real `/copilot/ask` responses |
+| Knowledge Base | Real `/knowledge/` list + detail |
+| Learning Feed | Real `/learning/events` + review actions |
+| Dashboard | Real `/dashboard/metrics` |
 
-```python
-# Similarity thresholds
-KB_GAP_THRESHOLD = 0.85           # Below this = gap detected
-SEARCH_RESULT_LIMIT = 5           # Default top-k results
-CONTENT_PREVIEW_LENGTH = 500      # Chars to show in previews
+### 5.3 Run Evaluation
 
-# Embedding config
-EMBEDDING_TEXT_SEPARATOR = "\n"   # Separator for title+body concatenation
-```
+- Execute `/copilot/evaluate` against all 1,000 ground-truth questions
+- Record hit@1, hit@3, hit@5 accuracy numbers
+- These numbers go into the demo (Scene 4)
 
----
+### 5.4 Polish
 
-## 9. Development Order & Dependencies
+- Add loading states and error boundaries to all frontend pages
+- Ensure the review workflow updates the UI immediately (approve → card turns green)
+- Test the "learning loop" end-to-end: detect gap → approve → copilot finds new article
+- Performance: ensure copilot responses return in < 3 seconds
 
-### Phase 1: Foundation (All teams, parallel)
+### 5.5 Phase 3 Checklist
 
-| Team | Task | Depends On |
-|------|------|------------|
-| Database | Create all model files | Nothing |
-| Database | Update `__init__.py` model registration | Model files |
-| Database | Add pgvector extension to lifespan | Nothing |
-| Backend | Create `schemas/` directory + all Pydantic schemas | API contracts in this doc |
-| Backend | Create stub route files (return mock data) | Schemas |
-| AI Agents | Create `VectorSearchService` | Model files |
-| AI Agents | Create `TriageAgent` skeleton | BaseAgent |
-| Frontend | Create `app-layout.tsx` shared navigation | Nothing |
-| Frontend | Extend `api.ts` with new types + methods | API contracts in this doc |
-| Frontend | Create all page files with placeholder UI | API types |
-
-**Milestone**: `make dev` starts cleanly. All routes return mock data. Frontend pages render with placeholder content.
-
-### Phase 2: Data Pipeline (Database team)
-
-| Task | Depends On |
-|------|------------|
-| Write `import_data.py` script | Model files + pgvector |
-| Import Excel data into PostgreSQL | import_data.py |
-| Write `generate_embeddings.py` script | Import complete |
-| Generate embeddings for all content | generate_embeddings.py |
-| Create IVFFlat indexes | Embeddings generated |
-| Add Makefile targets (`seed`, etc.) | Scripts complete |
-
-**Milestone**: `make seed` imports all data + generates embeddings + creates indexes. Database has 3,207 KB articles, 714 scripts, 400 tickets, etc., all with vector embeddings.
-
-### Phase 3: Core Features (Backend + Agents, parallel)
-
-| Team | Task | Depends On |
-|------|------|------------|
-| AI Agents | Implement `VectorSearchService` with real pgvector queries | Phase 2 (data in DB) |
-| AI Agents | Implement `TriageAgent` with LLM classification + vector search | VectorSearchService |
-| AI Agents | Implement `GapDetectionAgent` | VectorSearchService |
-| AI Agents | Implement `KBGenerationAgent` | GapDetectionAgent |
-| Backend | Implement `/copilot/ask` with TriageAgent | TriageAgent |
-| Backend | Implement `/knowledge/` list + detail endpoints | Phase 2 (data in DB) |
-| Backend | Implement `/learning/events` list endpoint | Phase 2 |
-| Backend | Implement `/learning/detect-gap` endpoint | GapDetectionAgent + KBGenerationAgent |
-| Backend | Implement `/learning/review/{id}` endpoint | Phase 2 |
-| Backend | Implement `/dashboard/metrics` endpoint | Phase 2 |
-| Backend | Implement `/copilot/evaluate` endpoint | TriageAgent + Phase 2 |
-
-**Milestone**: All API endpoints return real data. Copilot classifies and retrieves correctly. Gap detection generates draft articles.
-
-### Phase 4: Frontend Integration (Frontend team)
-
-| Task | Depends On |
-|------|------------|
-| Connect Copilot page to `/copilot/ask` endpoint | Phase 3 endpoint |
-| Connect KB page to `/knowledge/` endpoints | Phase 3 endpoint |
-| Connect Learning Feed to `/learning/` endpoints | Phase 3 endpoint |
-| Connect Dashboard to `/dashboard/metrics` | Phase 3 endpoint |
-| Add review approve/reject flow | Phase 3 review endpoint |
-| Polish UI, loading states, error handling | All endpoints working |
-
-**Milestone**: Full working demo end-to-end.
-
-### Phase 5: Polish & Demo Prep
-
-| Task | Depends On |
-|------|------------|
-| Run evaluation, get accuracy numbers | `/copilot/evaluate` |
-| Prepare demo script (Section 11) | All features working |
-| Add error boundaries and edge case handling | Phase 4 |
-| Performance optimization (caching, etc.) | Phase 4 |
+- [ ] Wire `/copilot/ask` to TriageAgent + VectorSearchService
+- [ ] Wire `/learning/detect-gap` to GapDetectionAgent + KBGenerationAgent
+- [ ] Implement `/copilot/evaluate` with full ground-truth evaluation
+- [ ] Connect all frontend pages to real backend endpoints
+- [ ] Test full learning loop: gap detection → draft → approve → copilot improvement
+- [ ] Run evaluation, record accuracy numbers
+- [ ] Polish loading states, error handling, edge cases
+- [ ] Rehearse demo script (Section 7)
 
 ---
 
-## 10. Environment & Configuration
+## 6. Environment & Configuration
 
 ### New Environment Variables
 
@@ -1616,7 +1456,7 @@ SEARCH_RESULT_LIMIT: int = 5
 
 ---
 
-## 11. Demo Script
+## 7. Demo Script
 
 **Duration**: 5 minutes
 
