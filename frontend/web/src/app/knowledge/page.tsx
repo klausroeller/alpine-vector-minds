@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useDebounce } from '@/hooks/use-debounce';
-import { api, type KBArticleListItem } from '@/lib/api';
+import { api, ApiError, type KBArticleListItem } from '@/lib/api';
 
 const PAGE_SIZE = 12;
 
@@ -24,11 +24,13 @@ export default function KnowledgePage() {
   const [category, setCategory] = useState('all');
   const [status, setStatus] = useState('all');
   const [categories, setCategories] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const debouncedSearch = useDebounce(search, 300);
 
   const fetchArticles = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await api.listKBArticles({
         search: debouncedSearch || undefined,
@@ -50,8 +52,8 @@ export default function KnowledgePage() {
         const merged = new Set([...prev, ...cats]);
         return Array.from(merged).sort();
       });
-    } catch {
-      // API not ready — show empty state
+    } catch (err) {
+      setError(err instanceof ApiError ? err.debugMessage : err instanceof Error ? err.message : 'Failed to load articles');
     } finally {
       setLoading(false);
     }
@@ -121,6 +123,11 @@ export default function KnowledgePage() {
 
           {/* Article list */}
           <div className="min-w-0 flex-1">
+            {error && (
+              <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+                {error}
+              </div>
+            )}
             {loading ? (
               <div className="grid gap-4">
                 {Array.from({ length: 4 }).map((_, i) => (

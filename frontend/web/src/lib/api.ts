@@ -1,16 +1,29 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public endpoint?: string,
+    public method?: string,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+
+  /** Formatted message with context for debugging */
+  get debugMessage(): string {
+    const parts: string[] = [];
+    if (this.method && this.endpoint) {
+      parts.push(`${this.method} ${this.endpoint}`);
+    }
+    parts.push(`[${this.status}] ${this.message}`);
+    return parts.join(' — ');
+  }
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method || 'GET').toUpperCase();
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   const headers: Record<string, string> = {
@@ -22,22 +35,33 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (err) {
+    throw new ApiError(
+      0,
+      `Network error: ${err instanceof Error ? err.message : 'Failed to connect'}`,
+      path,
+      method,
+    );
+  }
 
   if (res.status === 401) {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
-    throw new ApiError(401, 'Unauthorized');
+    throw new ApiError(401, 'Session expired — please log in again', path, method);
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: 'Request failed' }));
-    throw new ApiError(res.status, body.detail || 'Request failed');
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status} ${res.statusText}` }));
+    const detail = body.detail || `HTTP ${res.status} ${res.statusText}`;
+    throw new ApiError(res.status, detail, path, method);
   }
 
   return res.json();

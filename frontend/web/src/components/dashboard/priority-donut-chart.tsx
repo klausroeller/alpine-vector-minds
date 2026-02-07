@@ -10,10 +10,10 @@ interface PriorityDonutChartProps {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  CRITICAL: '#ef4444',
-  HIGH: '#f97316',
-  MEDIUM: '#eab308',
-  LOW: '#22c55e',
+  critical: '#ef4444',
+  high: '#f97316',
+  medium: '#eab308',
+  low: '#22c55e',
 };
 
 const DEFAULT_COLOR = '#64748b';
@@ -51,7 +51,7 @@ export function PriorityDonutChart({ data, loading }: PriorityDonutChartProps) {
                 {chartData.map((entry) => (
                   <Cell
                     key={entry.name}
-                    fill={PRIORITY_COLORS[entry.name] || DEFAULT_COLOR}
+                    fill={PRIORITY_COLORS[entry.name.toLowerCase()] || DEFAULT_COLOR}
                     fillOpacity={0.85}
                   />
                 ))}

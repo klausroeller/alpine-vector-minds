@@ -70,10 +70,10 @@ export function ArticleFilters({
           <SelectTrigger className="border-white/[0.06] bg-[#0a1628]/60 text-sm text-slate-300">
             <SelectValue placeholder="All categories" />
           </SelectTrigger>
-          <SelectContent className="border-white/[0.06] bg-[#0c1a2a]">
-            <SelectItem value="all">All categories</SelectItem>
+          <SelectContent className="border-white/[0.06] bg-[#0c1a2a] text-slate-300">
+            <SelectItem value="all" className="text-slate-300 focus:bg-white/[0.08] focus:text-white">All categories</SelectItem>
             {categories.map((cat) => (
-              <SelectItem key={cat} value={cat}>
+              <SelectItem key={cat} value={cat} className="text-slate-300 focus:bg-white/[0.08] focus:text-white">
                 {cat}
               </SelectItem>
             ))}
@@ -90,11 +90,11 @@ export function ArticleFilters({
           <SelectTrigger className="border-white/[0.06] bg-[#0a1628]/60 text-sm text-slate-300">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
-          <SelectContent className="border-white/[0.06] bg-[#0c1a2a]">
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="ACTIVE">Active</SelectItem>
-            <SelectItem value="DRAFT">Draft</SelectItem>
-            <SelectItem value="ARCHIVED">Archived</SelectItem>
+          <SelectContent className="border-white/[0.06] bg-[#0c1a2a] text-slate-300">
+            <SelectItem value="all" className="text-slate-300 focus:bg-white/[0.08] focus:text-white">All statuses</SelectItem>
+            <SelectItem value="ACTIVE" className="text-slate-300 focus:bg-white/[0.08] focus:text-white">Active</SelectItem>
+            <SelectItem value="DRAFT" className="text-slate-300 focus:bg-white/[0.08] focus:text-white">Draft</SelectItem>
+            <SelectItem value="ARCHIVED" className="text-slate-300 focus:bg-white/[0.08] focus:text-white">Archived</SelectItem>
           </SelectContent>
         </Select>
       </div>

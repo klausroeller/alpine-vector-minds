@@ -8,7 +8,7 @@ import { ReviewDialog } from '@/components/learning/review-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { api, type LearningEvent } from '@/lib/api';
+import { api, ApiError, type LearningEvent } from '@/lib/api';
 
 const PAGE_SIZE = 15;
 const STATUS_TABS = ['all', 'Pending', 'Approved', 'Rejected'] as const;
@@ -27,8 +27,11 @@ export default function LearningPage() {
   } | null>(null);
   const [reviewing, setReviewing] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+
   const fetchEvents = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await api.listLearningEvents({
         status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -37,8 +40,8 @@ export default function LearningPage() {
       });
       setEvents(data.items);
       setTotal(data.total);
-    } catch {
-      // API not ready
+    } catch (err) {
+      setError(err instanceof ApiError ? err.debugMessage : err instanceof Error ? err.message : 'Failed to load events');
     } finally {
       setLoading(false);
     }
@@ -59,8 +62,9 @@ export default function LearningPage() {
       await api.reviewLearningEvent(reviewTarget.id, reviewTarget.action);
       setReviewTarget(null);
       await fetchEvents();
-    } catch {
-      // Error handling
+    } catch (err) {
+      setError(err instanceof ApiError ? err.debugMessage : err instanceof Error ? err.message : 'Review failed');
+      setReviewTarget(null);
     } finally {
       setReviewing(false);
     }
@@ -94,6 +98,12 @@ export default function LearningPage() {
             ))}
           </TabsList>
         </Tabs>
+
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+            {error}
+          </div>
+        )}
 
         {/* Events list */}
         {loading ? (

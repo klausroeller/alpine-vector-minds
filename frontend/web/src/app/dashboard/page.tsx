@@ -7,18 +7,20 @@ import { MetricCard } from '@/components/dashboard/metric-card';
 import { CategoryBarChart } from '@/components/dashboard/category-bar-chart';
 import { PriorityDonutChart } from '@/components/dashboard/priority-donut-chart';
 import { RootCauseDonutChart } from '@/components/dashboard/root-cause-donut-chart';
-import { api, type DashboardMetrics } from '@/lib/api';
+import { api, ApiError, type DashboardMetrics } from '@/lib/api';
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchMetrics = useCallback(async () => {
     try {
+      setError(null);
       const data = await api.getDashboardMetrics();
       setMetrics(data);
-    } catch {
-      // API not available yet — show empty state
+    } catch (err) {
+      setError(err instanceof ApiError ? err.debugMessage : err instanceof Error ? err.message : 'Failed to load metrics');
     } finally {
       setLoading(false);
     }
@@ -37,6 +39,12 @@ export default function DashboardPage() {
             Platform overview and key metrics
           </p>
         </div>
+
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+            {error}
+          </div>
+        )}
 
         {/* Metric cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -6,7 +6,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { SearchBar } from '@/components/copilot/search-bar';
 import { ClassificationBadge } from '@/components/copilot/classification-badge';
 import { ResultCard } from '@/components/copilot/result-card';
-import { api, type CopilotResponse } from '@/lib/api';
+import { api, ApiError, type CopilotResponse } from '@/lib/api';
 
 export default function CopilotPage() {
   const [query, setQuery] = useState('');
@@ -30,7 +30,7 @@ export default function CopilotPage() {
         setTimeout(() => setResultsVisible(true), 50);
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
+      setError(err instanceof ApiError ? err.debugMessage : err instanceof Error ? err.message : 'Search failed');
     } finally {
       setLoading(false);
     }
