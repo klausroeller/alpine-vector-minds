@@ -58,7 +58,7 @@ Access the API docs at http://localhost:8000/docs once running.
 │   │   ├── models/           # SQLAlchemy models (9 tables)
 │   │   ├── database.py       # Async engine + session
 │   │   └── embeddings.py     # OpenAI embedding service
-│   ├── agents/               # AI agent services (base class, agents TBD)
+│   ├── agents/               # AI agent services (triage, gap detection, KB generation)
 │   ├── scripts/              # Data pipeline CLI scripts
 │   │   ├── import_data.py    # Excel → database import
 │   │   ├── generate_embeddings.py  # Batch embedding generation
@@ -123,7 +123,9 @@ Base URL: `http://localhost:8000`
 | `/api/v1/knowledge/{id}` | GET | Get KB article detail (auth required) |
 | `/api/v1/learning/events` | GET | List learning events (auth required) |
 | `/api/v1/learning/review/{id}` | POST | Approve/reject learning event (auth required) |
-| `/api/v1/copilot/ask` | POST | Copilot search (auth required) |
+| `/api/v1/copilot/ask` | POST | Copilot triage + vector search (auth required) |
+| `/api/v1/copilot/evaluate` | GET | Run ground-truth evaluation (auth required) |
+| `/api/v1/learning/detect-gap` | POST | Detect knowledge gap from ticket (auth required) |
 
 API docs: `/docs` (Swagger) or `/redoc`
 
@@ -175,4 +177,4 @@ See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full pl
 - **Phase 2A — Backend API**: Complete. CRUD endpoints for knowledge, learning, dashboard, copilot.
 - **Phase 2B — AI Agents**: Complete. Triage agent, gap detection, KB generation, vector search service.
 - **Phase 2C — Frontend**: Complete. Sidebar layout, dashboard, copilot, knowledge base, learning feed pages.
-- **Phase 3 — Integration & Polish**: Next up. Wire agents to endpoints, run evaluation, deploy.
+- **Phase 3 — Integration & Polish**: Complete. Copilot wired to TriageAgent with provenance enrichment, detect-gap wired to GapDetection + KBGeneration agents, embedding generation on article approval, ground-truth evaluation endpoint.

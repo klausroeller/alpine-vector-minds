@@ -1,25 +1,57 @@
+import json
+import logging
+import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.constants import DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from agents.base import AgentMessage
+from agents.gap_detection import GapDetectionAgent
+from agents.kb_generation import KBGenerationAgent
+from api.core.constants import (
+    DEFAULT_PAGE,
+    DEFAULT_PAGE_SIZE,
+    EMBEDDING_TEXT_SEPARATOR,
+    MAX_PAGE_SIZE,
+)
 from api.v1.auth import get_current_user
 from api.v1.schemas.learning import (
     DetectGapRequest,
     DetectGapResponse,
     LearningEventResponse,
     PaginatedLearningResponse,
+    ProposedArticle,
     ReviewRequest,
     ReviewResponse,
 )
 from vector_db.database import get_db
+from vector_db.embeddings import EmbeddingService
+from vector_db.models.conversation import Conversation
+from vector_db.models.kb_lineage import KBLineage
 from vector_db.models.knowledge_article import ArticleStatus, KnowledgeArticle
 from vector_db.models.learning_event import LearningEvent
+from vector_db.models.script import Script
+from vector_db.models.ticket import Ticket
 from vector_db.models.user import User
+from vector_db.search import VectorSearchService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _generate_kb_id() -> str:
+    """Generate a unique KB article ID for synthetically created articles."""
+    short = uuid.uuid4().hex[:8].upper()
+    return f"KB-SYNTH-{short}"
+
+
+def _generate_learn_id() -> str:
+    """Generate a unique learning event ID."""
+    short = uuid.uuid4().hex[:8].upper()
+    return f"LEARN-{short}"
 
 
 @router.get("/events", response_model=PaginatedLearningResponse)
@@ -106,6 +138,18 @@ async def review_learning_event(
             if review.decision == "Approved":
                 kb_article.status = ArticleStatus.ACTIVE
                 kb_article.updated_at = datetime.now(UTC)
+
+                # Generate embedding so approved article becomes searchable
+                if kb_article.embedding is None:
+                    try:
+                        embedding_service = EmbeddingService()
+                        embed_text = kb_article.title + EMBEDDING_TEXT_SEPARATOR + kb_article.body
+                        kb_article.embedding = await embedding_service.embed(embed_text)
+                    except Exception:
+                        logger.exception(
+                            "Failed to generate embedding for article %s on approval",
+                            kb_article.id,
+                        )
             else:
                 kb_article.status = ArticleStatus.ARCHIVED
                 kb_article.updated_at = datetime.now(UTC)
@@ -126,10 +170,143 @@ async def detect_gap(
     _current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DetectGapResponse:
-    # Stub: will be wired to GapDetectionAgent + KBGenerationAgent in Phase 3
+    # Fetch ticket
+    ticket_result = await db.execute(select(Ticket).where(Ticket.id == request.ticket_id))
+    ticket = ticket_result.scalar_one_or_none()
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ticket '{request.ticket_id}' not found",
+        )
+
+    # Fetch linked conversation
+    conv_result = await db.execute(
+        select(Conversation).where(Conversation.ticket_id == ticket.id)
+    )
+    conversation = conv_result.scalar_one_or_none()
+
+    # Fetch linked script (if any)
+    script = None
+    if ticket.script_id:
+        script_result = await db.execute(select(Script).where(Script.id == ticket.script_id))
+        script = script_result.scalar_one_or_none()
+
+    # Run gap detection agent
+    embedding_service = EmbeddingService()
+    search_service = VectorSearchService(db)
+    gap_agent = GapDetectionAgent(db, embedding_service, search_service)
+
+    gap_input = json.dumps({
+        "ticket_description": ticket.description or "",
+        "ticket_resolution": ticket.resolution or "",
+        "ticket_category": ticket.category or "",
+        "ticket_id": ticket.id,
+    })
+
+    gap_response = await gap_agent.run(
+        [AgentMessage(role="user", content=gap_input)]
+    )
+    gap_data = json.loads(gap_response.content)
+
+    if not gap_data.get("gap_detected", False):
+        return DetectGapResponse(
+            gap_detected=False,
+            detected_gap=gap_data.get("gap_description", "No gap detected."),
+        )
+
+    # Gap detected — generate KB article
+    kb_gen_agent = KBGenerationAgent()
+
+    gen_input_data: dict = {
+        "ticket_id": ticket.id,
+        "ticket_description": ticket.description or "",
+        "ticket_resolution": ticket.resolution or "",
+        "ticket_category": ticket.category or "",
+        "ticket_module": ticket.module or "",
+        "ticket_root_cause": ticket.root_cause or "",
+        "suggested_title": gap_data.get("suggested_title"),
+    }
+
+    if conversation:
+        gen_input_data["conversation_transcript"] = conversation.transcript or ""
+
+    if script:
+        gen_input_data["script_title"] = script.title
+        gen_input_data["script_id"] = script.id
+
+    gen_response = await kb_gen_agent.run(
+        [AgentMessage(role="user", content=json.dumps(gen_input_data))]
+    )
+    article_data = json.loads(gen_response.content)
+
+    # Create draft KB article
+    kb_id = _generate_kb_id()
+    embed_text = article_data["title"] + EMBEDDING_TEXT_SEPARATOR + article_data["body"]
+    embedding = await embedding_service.embed(embed_text)
+
+    kb_article = KnowledgeArticle(
+        id=kb_id,
+        title=article_data["title"],
+        body=article_data["body"],
+        category=article_data.get("category", ticket.category),
+        module=ticket.module,
+        status=ArticleStatus.DRAFT,
+        source_type="SYNTH_FROM_TICKET",
+        embedding=embedding,
+    )
+    db.add(kb_article)
+
+    # Create lineage records
+    lineage_ticket = KBLineage(
+        kb_article_id=kb_id,
+        source_id=ticket.id,
+        relationship="CREATED_FROM",
+        evidence_snippet=ticket.resolution[:200] if ticket.resolution else None,
+        event_timestamp=datetime.now(UTC),
+    )
+    db.add(lineage_ticket)
+
+    if conversation:
+        lineage_conv = KBLineage(
+            kb_article_id=kb_id,
+            source_id=conversation.id,
+            relationship="CREATED_FROM",
+            evidence_snippet=conversation.transcript[:200] if conversation.transcript else None,
+            event_timestamp=datetime.now(UTC),
+        )
+        db.add(lineage_conv)
+
+    if script:
+        lineage_script = KBLineage(
+            kb_article_id=kb_id,
+            source_id=script.id,
+            relationship="REFERENCES",
+            evidence_snippet=script.title,
+            event_timestamp=datetime.now(UTC),
+        )
+        db.add(lineage_script)
+
+    # Create learning event
+    learn_id = _generate_learn_id()
+    learning_event = LearningEvent(
+        id=learn_id,
+        trigger_ticket_id=ticket.id,
+        detected_gap=gap_data.get("gap_description", ""),
+        proposed_kb_article_id=kb_id,
+        final_status="Pending",
+    )
+    db.add(learning_event)
+
+    await db.flush()
+
     return DetectGapResponse(
-        gap_detected=False,
-        learning_event_id=None,
-        detected_gap="Stub: gap detection not yet implemented. Will be wired to AI agents in Phase 3.",
-        proposed_article=None,
+        gap_detected=True,
+        learning_event_id=learn_id,
+        detected_gap=gap_data.get("gap_description", ""),
+        proposed_article=ProposedArticle(
+            id=kb_id,
+            title=article_data["title"],
+            body=article_data["body"],
+            status=ArticleStatus.DRAFT,
+        ),
     )

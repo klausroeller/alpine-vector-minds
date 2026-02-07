@@ -147,6 +147,22 @@ export interface DashboardMetrics {
   };
 }
 
+// --- Detect Gap ---
+
+export interface ProposedArticle {
+  id: string;
+  title: string;
+  body: string;
+  status: string;
+}
+
+export interface DetectGapResponse {
+  gap_detected: boolean;
+  learning_event_id: string | null;
+  detected_gap: string | null;
+  proposed_article: ProposedArticle | null;
+}
+
 // --- Copilot ---
 
 export interface Classification {
@@ -255,6 +271,14 @@ export const api = {
   // Dashboard
   getDashboardMetrics: async (): Promise<DashboardMetrics> => {
     return request<DashboardMetrics>('/api/v1/dashboard/metrics');
+  },
+
+  // Learning — Detect Gap
+  detectGap: async (ticketId: string): Promise<DetectGapResponse> => {
+    return request<DetectGapResponse>('/api/v1/learning/detect-gap', {
+      method: 'POST',
+      body: JSON.stringify({ ticket_id: ticketId }),
+    });
   },
 
   // Copilot
