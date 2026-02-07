@@ -65,6 +65,7 @@ export function ResultCard({ result, index, visible }: ResultCardProps) {
                 <Icon className="h-3 w-3" />
                 {source.label}
               </Badge>
+              <span className="font-mono text-[11px] text-slate-500">{result.source_id}</span>
               {result.category && (
                 <span className="text-xs text-slate-600">{result.category}</span>
               )}
