@@ -7,12 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.core.config import settings
 from api.health import router as health_router
 from api.v1 import router as v1_router
-from vector_db.database import engine
+from vector_db.database import Base, engine
+from vector_db.models import User  # noqa: F401 - ensure model is registered with Base.metadata
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    # Startup
+    # Startup: create database tables if they don't exist
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     yield
     # Shutdown
     await engine.dispose()
