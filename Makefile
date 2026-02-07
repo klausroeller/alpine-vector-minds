@@ -1,4 +1,4 @@
-.PHONY: install dev dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed seed-production
+.PHONY: install dev dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed seed-production evaluate
 
 # ─── Development ────────────────────────────────────────────
 
@@ -34,6 +34,13 @@ seed: import-data generate-embeddings create-vector-indexes
 
 seed-production:
 	./scripts/seed-production.sh
+
+evaluate:
+	cd backend && uv run python -m scripts.evaluate \
+		--env $(or $(ENV),dev) \
+		$(if $(BASE_URL),--base-url $(BASE_URL),) \
+		$(if $(EVAL_EMAIL),--email $(EVAL_EMAIL),) \
+		$(if $(EVAL_PASSWORD),--password $(EVAL_PASSWORD),)
 
 # ─── Production (single command) ───────────────────────────
 #
