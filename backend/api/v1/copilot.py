@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Map agent-internal answer_type labels to frontend source_type values
+_SOURCE_TYPE_MAP: dict[str, str] = {
+    "SCRIPT": "script",
+    "KB": "kb_article",
+    "TICKET_RESOLUTION": "ticket",
+}
+
 
 async def _get_provenance(db: AsyncSession, article_id: str) -> ProvenanceInfo | None:
     """Fetch provenance info from kb_lineage for a KB article."""
@@ -89,12 +96,13 @@ async def copilot_ask(
 
     results: list[SearchResult] = []
     for r in raw_results:
-        source_type = r.get("source_type", "")
+        raw_type = r.get("source_type", "")
+        source_type = _SOURCE_TYPE_MAP.get(raw_type, raw_type)
         source_id = r.get("id", "")
 
-        # Enrich with provenance for KB articles with synthetic source types
+        # Enrich with provenance for KB articles
         provenance = None
-        if source_type == "KB" and r.get("source_type_detail", r.get("source_type", "")):
+        if source_type == "kb_article":
             provenance = await _get_provenance(db, source_id)
 
         results.append(

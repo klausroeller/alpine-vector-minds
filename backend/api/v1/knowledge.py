@@ -18,6 +18,7 @@ from api.v1.schemas.knowledge import (
 from vector_db.database import get_db
 from vector_db.models.kb_lineage import KBLineage
 from vector_db.models.knowledge_article import KnowledgeArticle
+from vector_db.models.script import Script
 from vector_db.models.user import User
 
 router = APIRouter()
@@ -90,39 +91,57 @@ async def get_knowledge_article(
     _current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> KBArticleDetailResponse:
+    # Try knowledge_articles first; fall back to scripts table for SCRIPT-* IDs
     result = await db.execute(select(KnowledgeArticle).where(KnowledgeArticle.id == article_id))
     article = result.scalar_one_or_none()
-    if not article:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Knowledge article '{article_id}' not found",
+
+    if article:
+        lineage_result = await db.execute(
+            select(KBLineage).where(KBLineage.kb_article_id == article_id)
+        )
+        lineage_rows = lineage_result.scalars().all()
+        lineage = [
+            LineageEntry(
+                source_id=row.source_id,
+                relationship=row.relationship,
+                evidence_snippet=row.evidence_snippet,
+            )
+            for row in lineage_rows
+        ]
+        return KBArticleDetailResponse(
+            id=article.id,
+            title=article.title,
+            body=article.body,
+            source_type=article.source_type,
+            status=article.status,
+            category=article.category,
+            module=article.module,
+            tags=article.tags,
+            created_at=article.created_at.isoformat(),
+            updated_at=article.updated_at.isoformat(),
+            lineage=lineage,
         )
 
-    # Fetch lineage records
-    lineage_result = await db.execute(
-        select(KBLineage).where(KBLineage.kb_article_id == article_id)
-    )
-    lineage_rows = lineage_result.scalars().all()
+    # Fall back to scripts table
+    if article_id.startswith("SCRIPT-"):
+        script_result = await db.execute(select(Script).where(Script.id == article_id))
+        script = script_result.scalar_one_or_none()
+        if script:
+            return KBArticleDetailResponse(
+                id=script.id,
+                title=script.title,
+                body=script.script_text,
+                source_type="script",
+                status="ACTIVE",
+                category=script.category,
+                module=script.module,
+                tags=None,
+                created_at=script.created_at.isoformat(),
+                updated_at=script.updated_at.isoformat(),
+                lineage=[],
+            )
 
-    lineage = [
-        LineageEntry(
-            source_id=row.source_id,
-            relationship=row.relationship,
-            evidence_snippet=row.evidence_snippet,
-        )
-        for row in lineage_rows
-    ]
-
-    return KBArticleDetailResponse(
-        id=article.id,
-        title=article.title,
-        body=article.body,
-        source_type=article.source_type,
-        status=article.status,
-        category=article.category,
-        module=article.module,
-        tags=article.tags,
-        created_at=article.created_at.isoformat(),
-        updated_at=article.updated_at.isoformat(),
-        lineage=lineage,
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Knowledge article '{article_id}' not found",
     )

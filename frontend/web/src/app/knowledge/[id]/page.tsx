@@ -20,6 +20,10 @@ const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
     label: 'Synthetic',
     className: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
   },
+  script: {
+    label: 'Script',
+    className: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  },
 };
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
@@ -107,6 +111,7 @@ export default function ArticleDetailPage() {
               <Badge variant="outline" className={status.className}>
                 {status.label}
               </Badge>
+              <span className="font-mono text-[11px] text-slate-500">{article.id}</span>
               {article.category && (
                 <Badge
                   variant="outline"
@@ -121,13 +126,21 @@ export default function ArticleDetailPage() {
             </div>
 
             {/* Body */}
-            <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-300">
-              {article.body.split('\n').map((paragraph, i) => (
-                <p key={i} className="mb-3">
-                  {paragraph}
-                </p>
-              ))}
-            </div>
+            {article.source_type === 'script' ? (
+              <pre className="overflow-x-auto rounded-lg bg-[#020810] p-5 ring-1 ring-white/[0.06]">
+                <code className="text-sm leading-relaxed text-emerald-300/90">
+                  {article.body}
+                </code>
+              </pre>
+            ) : (
+              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-300">
+                {article.body.split('\n').map((paragraph, i) => (
+                  <p key={i} className="mb-3">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {/* Provenance */}
             {article.lineage.length > 0 && (
