@@ -1,4 +1,4 @@
-.PHONY: install dev lint test create-admin infra infra-destroy deploy init-ssl production backup
+.PHONY: install dev lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed
 
 # ─── Development ────────────────────────────────────────────
 
@@ -15,6 +15,19 @@ lint:
 
 test:
 	cd backend && uv run pytest
+
+# ─── Data Pipeline ─────────────────────────────────────────
+
+import-data:
+	cd backend && uv run python -m scripts.import_data
+
+generate-embeddings:
+	cd backend && uv run python -m scripts.generate_embeddings
+
+create-vector-indexes:
+	cd backend && uv run python -m scripts.create_vector_indexes
+
+seed: import-data generate-embeddings create-vector-indexes
 
 # ─── Production (single command) ───────────────────────────
 #

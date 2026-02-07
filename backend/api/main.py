@@ -3,21 +3,32 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from api.core.config import settings
 from api.core.security import get_password_hash
 from api.health import router as health_router
 from api.v1 import router as v1_router
 from vector_db.database import Base, async_session_maker, engine
-from vector_db.models import User  # noqa: F401 - ensure model is registered with Base.metadata
+from vector_db.models import (  # noqa: F401 - ensure models are registered with Base.metadata
+    Conversation,
+    KBLineage,
+    KnowledgeArticle,
+    LearningEvent,
+    Placeholder,
+    Question,
+    Script,
+    Ticket,
+    User,
+)
 from vector_db.models.user import UserRole
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    # Startup: create database tables if they don't exist
+    # Startup: enable pgvector and create database tables if they don't exist
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
     # Seed default user on fresh database
