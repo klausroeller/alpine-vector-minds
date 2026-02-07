@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Fewer features that work flawlessly with a polished UI over many half-finished ones
 - Do not add new features at the cost of breaking or degrading existing ones
 - Every feature must be fully functional end-to-end before moving on to the next
+- **Design the data model as if it's going to prod tomorrow** — use proper constraints, indexes, non-nullable columns where appropriate, and meaningful foreign keys. Migrating a sloppy schema later costs more than getting it right now
 
 ## Documentation
 
@@ -96,6 +97,13 @@ Brief one-line description of the change.
 - **Always update the `Makefile`** when adding new commands, scripts, or repeatable tasks
 - The `Makefile` is the single entry point for all development commands — keep it up to date
 - **Never run scripts directly** (e.g., `./scripts/deploy.sh`) — always use the corresponding `make` target (e.g., `make deploy`). Makefile targets may include validation, environment setup, or parameter handling that scripts alone do not.
+
+## Parametrize, Don't Hardcode
+
+- **Always use environment variables, config files, or constants** for values that may change across environments — never hardcode paths, URLs, ports, cluster config, or numeric thresholds directly in application code
+- Extract magic numbers into named constants or configuration with clear intent (e.g., `MAX_RETRY_ATTEMPTS = 3`, not a bare `3`)
+- Paths and endpoints should come from env vars or a central config module, not be scattered as string literals
+- Hardcoded values are tech debt — parametrize early to keep the codebase portable and maintainable
 
 ## Git Conventions
 
