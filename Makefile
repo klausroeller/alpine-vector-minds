@@ -1,4 +1,4 @@
-.PHONY: install dev lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed seed-production
+.PHONY: install dev dev-seed dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed seed-production
 
 # ─── Development ────────────────────────────────────────────
 
@@ -8,6 +8,9 @@ install:
 
 dev:
 	docker compose up --build
+
+dev-teardown:
+	docker compose down -v
 
 lint:
 	cd backend && uv run ruff check .
