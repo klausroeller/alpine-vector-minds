@@ -1,21 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
-TF_DIR="infrastructure/terraform/environments/dev"
+DEPLOY_HOST=${DEPLOY_HOST:-alpine-vector-minds.de}
+KEY_PATH=${KEY_PATH:-$HOME/.ssh/avm-ec2-key.pem}
 REMOTE_USER="ec2-user"
 REMOTE_DIR="/opt/app"
 LOCAL_BACKUP_DIR="${1:-./backups}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
-# Get host and key from terraform state
-EC2_IP=$(cd "$TF_DIR" && terraform output -raw ec2_public_ip)
-KEY_PATH="$TF_DIR/$(cd "$TF_DIR" && terraform output -raw private_key_path)"
+if [ ! -f "$KEY_PATH" ]; then
+  echo "ERROR: SSH key not found at $KEY_PATH"
+  echo "Get the key from the team and place it there, or set KEY_PATH."
+  exit 1
+fi
+
 SSH_OPTS="-o StrictHostKeyChecking=no -i $KEY_PATH"
 
 mkdir -p "$LOCAL_BACKUP_DIR"
 
-echo "==> Creating database backup on $EC2_IP..."
-ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" "
+echo "==> Creating database backup on $DEPLOY_HOST..."
+ssh $SSH_OPTS "$REMOTE_USER@$DEPLOY_HOST" "
   docker exec avm-db pg_dump -U postgres alpine_vector_minds | gzip
 " > "$LOCAL_BACKUP_DIR/avm-db-$TIMESTAMP.sql.gz"
 

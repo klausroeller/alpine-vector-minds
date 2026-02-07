@@ -2,17 +2,21 @@
 set -euo pipefail
 
 # ─── Configuration ──────────────────────────────────────────
-TF_DIR="infrastructure/terraform/environments/dev"
+DEPLOY_HOST=${DEPLOY_HOST:-alpine-vector-minds.de}
+KEY_PATH=${KEY_PATH:-$HOME/.ssh/avm-ec2-key.pem}
 REMOTE_USER="ec2-user"
 REMOTE_DIR="/opt/app"
 ENV_FILE=".env.production"
 
-# Get host and key from env vars, falling back to terraform state
-EC2_IP=${EC2_IP:-$(cd "$TF_DIR" && terraform output -raw ec2_public_ip)}
-KEY_PATH=${KEY_PATH:-"$TF_DIR/$(cd "$TF_DIR" && terraform output -raw private_key_path)"}
+if [ ! -f "$KEY_PATH" ]; then
+  echo "ERROR: SSH key not found at $KEY_PATH"
+  echo "Get the key from the team and place it there, or set KEY_PATH."
+  exit 1
+fi
+
 SSH_OPTS="-o StrictHostKeyChecking=no -i $KEY_PATH"
 
-echo "==> Deploying to $EC2_IP..."
+echo "==> Deploying to $DEPLOY_HOST..."
 
 # Sync project files
 rsync -avz --delete \
@@ -29,17 +33,17 @@ rsync -avz --delete \
   --exclude 'backups' \
   --exclude '.terraform' \
   --exclude '*.tfstate*' \
-  ./ "$REMOTE_USER@$EC2_IP:$REMOTE_DIR/"
+  ./ "$REMOTE_USER@$DEPLOY_HOST:$REMOTE_DIR/"
 
 # Copy production env
 if [ -f "$ENV_FILE" ]; then
   echo "==> Syncing $ENV_FILE..."
-  scp $SSH_OPTS "$ENV_FILE" "$REMOTE_USER@$EC2_IP:$REMOTE_DIR/.env"
+  scp $SSH_OPTS "$ENV_FILE" "$REMOTE_USER@$DEPLOY_HOST:$REMOTE_DIR/.env"
 fi
 
 # Rebuild and restart
 echo "==> Building and restarting containers..."
-ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" "
+ssh $SSH_OPTS "$REMOTE_USER@$DEPLOY_HOST" "
   cd $REMOTE_DIR
   docker-compose -f docker-compose.prod.yml up -d --build
   docker-compose -f docker-compose.prod.yml ps

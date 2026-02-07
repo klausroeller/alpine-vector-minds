@@ -54,8 +54,13 @@ KEY_PATH="$(pwd)/$(terraform output -raw private_key_path)"
 
 cd - > /dev/null
 
+# Copy key to conventional location so all team scripts work
+SHARED_KEY="$HOME/.ssh/avm-ec2-key.pem"
+cp "$KEY_PATH" "$SHARED_KEY"
+chmod 600 "$SHARED_KEY"
+
 echo "    EC2 IP: $EC2_IP"
-echo "    SSH Key: $KEY_PATH"
+echo "    SSH Key: $KEY_PATH (also copied to $SHARED_KEY)"
 
 # ─── Step 4: Wait for EC2 user-data to complete ────────────
 echo ""

@@ -74,15 +74,30 @@ API docs: `/docs` (Swagger) or `/redoc`
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+Copy `.env.example` to `.env` — it has working local dev defaults out of the box. Both `docker-compose.yml` (dev) and `docker-compose.prod.yml` (production) read from root `.env` via `${VAR:-default}` interpolation.
+
+| Variable | Dev default | Description |
+|----------|-------------|-------------|
+| `POSTGRES_USER` | `postgres` | Database user |
+| `POSTGRES_PASSWORD` | `postgres` | Database password |
+| `POSTGRES_DB` | `alpine_vector_minds` | Database name |
+| `SECRET_KEY` | `dev-secret-key-...` | JWT signing key |
+| `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | API URL for frontend |
+| `OPENAI_API_KEY` | — | OpenAI API key (for embeddings) |
+
+## Deployment
+
+All scripts use the domain `alpine-vector-minds.de` by default (overridable via `DEPLOY_HOST`).
+
+**Prerequisites** for deploying:
+1. SSH key at `~/.ssh/avm-ec2-key.pem` (get from whoever ran initial `make production` setup, or set `KEY_PATH`)
+2. `.env.production` file in the repo root (with real secrets)
 
 ```bash
-# Required
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/alpine_vector_minds
-SECRET_KEY=your-secret-key
-
-# Optional
-OPENAI_API_KEY=sk-...  # For embeddings
+make deploy       # Deploy code + restart containers
+make backup       # Download a database backup
+make init-ssl     # Re-initialize SSL certificate (ADMIN_EMAIL required)
 ```
 
 ## Adding shadcn Components
