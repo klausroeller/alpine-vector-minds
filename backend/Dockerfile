@@ -20,6 +20,7 @@ RUN uv sync --frozen --no-dev
 COPY api ./api
 COPY vector_db ./vector_db
 COPY agents ./agents
+COPY scripts ./scripts
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

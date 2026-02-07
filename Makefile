@@ -1,4 +1,4 @@
-.PHONY: install dev lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed
+.PHONY: install dev lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed seed-production
 
 # ─── Development ────────────────────────────────────────────
 
@@ -19,15 +19,18 @@ test:
 # ─── Data Pipeline ─────────────────────────────────────────
 
 import-data:
-	cd backend && uv run python -m scripts.import_data
+	docker exec alpine-api uv run python -m scripts.import_data
 
 generate-embeddings:
-	cd backend && uv run python -m scripts.generate_embeddings
+	docker exec alpine-api uv run python -m scripts.generate_embeddings
 
 create-vector-indexes:
-	cd backend && uv run python -m scripts.create_vector_indexes
+	docker exec alpine-api uv run python -m scripts.create_vector_indexes
 
 seed: import-data generate-embeddings create-vector-indexes
+
+seed-production:
+	./scripts/seed-production.sh
 
 # ─── Production (single command) ───────────────────────────
 #

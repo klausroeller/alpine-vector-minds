@@ -162,6 +162,24 @@ ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" "
     --password '$ADMIN_PASSWORD'
 "
 
+# ─── Step 8: Seed database ────────────────────────────────
+echo ""
+echo "==> Seeding database (import data, generate embeddings, create indexes)..."
+
+echo "    Importing data..."
+ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" \
+  "cd $REMOTE_DIR && docker exec avm-api uv run python -m scripts.import_data"
+
+echo "    Generating embeddings..."
+ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" \
+  "cd $REMOTE_DIR && docker exec avm-api uv run python -m scripts.generate_embeddings"
+
+echo "    Creating vector indexes..."
+ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" \
+  "cd $REMOTE_DIR && docker exec avm-api uv run python -m scripts.create_vector_indexes"
+
+echo "    Database seeding complete."
+
 # ─── Done ──────────────────────────────────────────────────
 echo ""
 echo "============================================"

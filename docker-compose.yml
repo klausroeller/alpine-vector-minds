@@ -38,6 +38,8 @@ services:
       - ./backend/api:/app/api:ro
       - ./backend/vector_db:/app/vector_db:ro
       - ./backend/agents:/app/agents:ro
+      - ./backend/scripts:/app/scripts:ro
+      - ./data:/data:ro
 
   web:
     build:
