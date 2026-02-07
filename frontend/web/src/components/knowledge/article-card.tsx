@@ -52,6 +52,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
         <Badge variant="outline" className={status.className}>
           {status.label}
         </Badge>
+        <span className="font-mono text-[11px] text-slate-500">{article.id}</span>
         {article.category && (
           <span className="text-xs text-slate-600">{article.category}</span>
         )}
