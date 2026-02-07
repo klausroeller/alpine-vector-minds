@@ -6,6 +6,7 @@ class EmbeddingSettings(BaseSettings):
     OPENAI_API_KEY: str = ""
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSIONS: int = 1536
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
 
 
 settings = EmbeddingSettings()

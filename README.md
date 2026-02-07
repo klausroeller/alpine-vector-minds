@@ -69,6 +69,7 @@ Base URL: `http://localhost:8000`
 | `/api/v1/auth/token` | POST | Login (OAuth2) |
 | `/api/v1/users/` | POST | Create user |
 | `/api/v1/users/me` | GET | Get current user |
+| `/api/v1/chat/` | POST | Chat completion (auth required) |
 
 API docs: `/docs` (Swagger) or `/redoc`
 
@@ -84,7 +85,8 @@ Copy `.env.example` to `.env` — it has working local dev defaults out of the b
 | `SECRET_KEY` | `dev-secret-key-...` | JWT signing key |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | API URL for frontend |
-| `OPENAI_API_KEY` | — | OpenAI API key (for embeddings) |
+| `OPENAI_API_KEY` | — | OpenAI API key (for embeddings & chat) |
+| `OPENAI_CHAT_MODEL` | `gpt-4o-mini` | Model for chat completions |
 
 ## Deployment
 
