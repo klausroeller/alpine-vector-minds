@@ -1,4 +1,4 @@
-.PHONY: install dev dev-seed dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed seed-production
+.PHONY: install dev dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed seed-production
 
 # ─── Development ────────────────────────────────────────────
 
