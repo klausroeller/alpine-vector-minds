@@ -118,8 +118,24 @@ Base URL: `http://localhost:8000`
 | `/api/v1/users/` | POST | Create user |
 | `/api/v1/users/me` | GET | Get current user |
 | `/api/v1/chat/` | POST | Chat completion (auth required) |
+| `/api/v1/dashboard/metrics` | GET | Dashboard metrics (auth required) |
+| `/api/v1/knowledge/` | GET | List KB articles with filters (auth required) |
+| `/api/v1/knowledge/{id}` | GET | Get KB article detail (auth required) |
+| `/api/v1/learning/events` | GET | List learning events (auth required) |
+| `/api/v1/learning/review/{id}` | POST | Approve/reject learning event (auth required) |
+| `/api/v1/copilot/ask` | POST | Copilot search (auth required) |
 
 API docs: `/docs` (Swagger) or `/redoc`
+
+## Frontend Pages
+
+| Route | Description |
+|-------|-------------|
+| `/dashboard` | Metrics overview with charts (KB categories, ticket priorities, root causes) |
+| `/copilot` | AI-powered search across KB articles, scripts, and tickets |
+| `/knowledge` | Knowledge base list with search, filters, pagination |
+| `/knowledge/[id]` | Article detail with provenance chain |
+| `/learning` | Learning feed with status tabs and approve/reject workflow |
 
 ## Environment Variables
 
@@ -156,5 +172,7 @@ make init-ssl     # Re-initialize SSL certificate (ADMIN_EMAIL required)
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full plan.
 
 - **Phase 1 — Foundation**: Complete. Database models, data import, embeddings, vector indexes.
-- **Phase 2 — Parallel Tracks**: Next up. Backend API (CRUD endpoints), AI Agents (triage, gap detection, KB generation), Frontend (copilot, knowledge base, learning feed, dashboard).
-- **Phase 3 — Integration & Polish**: Wire agents to endpoints, connect frontend to real APIs, run evaluation.
+- **Phase 2A — Backend API**: Complete. CRUD endpoints for knowledge, learning, dashboard, copilot.
+- **Phase 2B — AI Agents**: Complete. Triage agent, gap detection, KB generation, vector search service.
+- **Phase 2C — Frontend**: Complete. Sidebar layout, dashboard, copilot, knowledge base, learning feed pages.
+- **Phase 3 — Integration & Polish**: Next up. Wire agents to endpoints, run evaluation, deploy.
