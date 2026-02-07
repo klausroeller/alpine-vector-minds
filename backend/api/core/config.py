@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # SupportMind AI
+    OPENAI_CHAT_MODEL: str = "gpt-5"
+    KB_GAP_THRESHOLD: float = 0.85
+    SEARCH_RESULT_LIMIT: int = 5
+
     # Default dev user (seeded on first DB init when both email and password are set)
     DEFAULT_USER_EMAIL: str | None = None
     DEFAULT_USER_PASSWORD: str | None = None
