@@ -68,7 +68,7 @@ export function ResultCard({ result, index, visible }: ResultCardProps) {
               {result.source_type === 'kb_article' ? (
                 <Link
                   href={`/knowledge/${result.source_id}`}
-                  className="font-mono text-[11px] text-slate-500 transition-colors hover:text-teal-400"
+                  className="font-mono text-[11px] text-teal-400/70 underline decoration-teal-400/30 transition-colors hover:text-teal-300 hover:decoration-teal-300"
                 >
                   {result.source_id}
                 </Link>
@@ -83,7 +83,7 @@ export function ResultCard({ result, index, visible }: ResultCardProps) {
             {result.source_type === 'kb_article' ? (
               <Link
                 href={`/knowledge/${result.source_id}`}
-                className="text-[15px] font-medium text-white transition-colors hover:text-teal-400"
+                className="text-[15px] font-medium text-teal-300 underline decoration-teal-400/30 transition-colors hover:text-teal-200 hover:decoration-teal-300"
               >
                 {result.title}
               </Link>
