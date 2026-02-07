@@ -1,29 +1,48 @@
-# Alpine Vector Minds
+# Alpine Vector Minds — SupportMind AI
 
-A full-stack monorepo template for AI-powered applications.
+A **self-learning support intelligence layer** for the RealPage SupportMind AI hackathon challenge. Two hero features:
+
+1. **Intelligent Triage Copilot** — Classify support questions, retrieve best-match answers via vector search with full provenance
+2. **Self-Learning Knowledge Loop** — Detect knowledge gaps from resolved tickets, auto-generate draft KB articles, human-in-the-loop review
 
 **Authors**: Dr. Volker Pernice and Dr. Klaus Röller
 
 ## Tech Stack
 
-- **Backend**: Python 3.13 + FastAPI + SQLAlchemy + PostgreSQL with pgvector
-- **Frontend**: Next.js 15 + TypeScript + shadcn/ui + Lucide icons
-- **Infrastructure**: Docker containers deployed to AWS EC2
+- **Backend**: Python 3.13 + FastAPI + SQLAlchemy 2.0 + PostgreSQL 16 with pgvector
+- **Frontend**: Next.js 15 + TypeScript + Tailwind CSS + shadcn/ui + Lucide icons
+- **AI**: OpenAI `text-embedding-3-small` (1536 dims) for embeddings, GPT for LLM agents
+- **Infrastructure**: Docker Compose (dev), AWS EC2 (prod)
 
 ## Quick Start
 
 ```bash
-# Copy environment file
+# 1. Copy environment file and set your OpenAI key
 cp .env.example .env
+# Edit .env → set OPENAI_API_KEY
 
-# Start all services (DB + API + Web with hot reload)
+# 2. Install host dependencies (needed for data pipeline scripts)
+make install
+
+# 3. Start all services (DB + API + Web)
 make dev
+
+# 4. In a separate terminal: seed the database with data + embeddings + indexes
+#    Requires make dev to be running (scripts connect to DB on localhost:5432)
+make seed
 ```
 
-This starts:
+**What `make dev` starts:**
 - PostgreSQL with pgvector on `:5432`
-- FastAPI backend on `:8000`
+- FastAPI backend on `:8000` (auto-creates tables + pgvector extension on startup)
 - Next.js frontend on `:3000`
+
+**What `make seed` does (in order):**
+1. `make import-data` — Imports all data from `data/SupportMind__Final_Data.xlsx` into the database (3,207 KB articles, 714 scripts, 400 tickets, 1,000 questions, etc.)
+2. `make generate-embeddings` — Generates OpenAI embeddings for KB articles, scripts, and questions (~$0.06 cost)
+3. `make create-vector-indexes` — Creates IVFFlat indexes on embedding columns for fast similarity search
+
+> **Important**: `make seed` runs on the host via `uv run` and connects to the Dockerized DB at `localhost:5432`. The DB must be up (`make dev`) before running `make seed`.
 
 Access the API docs at http://localhost:8000/docs once running.
 
@@ -33,29 +52,59 @@ Access the API docs at http://localhost:8000/docs once running.
 ├── backend/                  # Python backend (unified package)
 │   ├── api/                  # FastAPI routes and core logic
 │   │   ├── core/             # Config, database, security
-│   │   ├── models/           # SQLAlchemy models
-│   │   ├── v1/               # API v1 routes
-│   │   └── main.py           # FastAPI entry point
+│   │   ├── v1/               # API v1 routes (auth, users, chat)
+│   │   └── main.py           # FastAPI entry point (pgvector init, table creation)
 │   ├── vector_db/            # Vector search with pgvector
-│   ├── agents/               # AI agent services
+│   │   ├── models/           # SQLAlchemy models (9 tables)
+│   │   ├── database.py       # Async engine + session
+│   │   └── embeddings.py     # OpenAI embedding service
+│   ├── agents/               # AI agent services (base class, agents TBD)
+│   ├── scripts/              # Data pipeline CLI scripts
+│   │   ├── import_data.py    # Excel → database import
+│   │   ├── generate_embeddings.py  # Batch embedding generation
+│   │   └── create_vector_indexes.py  # IVFFlat index creation
 │   ├── tests/                # Backend tests
-│   └── Dockerfile            # API container definition
+│   └── Dockerfile
+├── data/                     # Local data files (gitignored)
+│   └── SupportMind__Final_Data.xlsx
 ├── frontend/
 │   ├── web/                  # Next.js frontend (TypeScript)
-│   │   └── Dockerfile        # Web container definition
 │   └── packages/             # Shared TypeScript packages
 ├── infrastructure/
 │   └── terraform/            # AWS infrastructure as code
 ├── docs/
+│   ├── IMPLEMENTATION_PLAN.md  # Full implementation plan
 │   └── CHANGELOG/            # Changelog entries
 └── .github/workflows/        # CI/CD pipelines
 ```
 
+## Database Schema
+
+9 tables, all with proper constraints and indexes:
+
+| Table | Rows (seed) | Embeddings | Description |
+|-------|-------------|------------|-------------|
+| `knowledge_articles` | 3,207 | 1536-dim | KB articles (seed + auto-generated) |
+| `scripts` | 714 | 1536-dim | SQL fix scripts with placeholders |
+| `tickets` | 400 | — | Support tickets with resolution |
+| `conversations` | 400 | — | Chat/phone transcripts linked to tickets |
+| `questions` | 1,000 | 1536-dim | Ground-truth Q&A for evaluation |
+| `kb_lineage` | 483 | — | Provenance chain for auto-generated articles |
+| `learning_events` | 161 | — | Knowledge gap detection + review workflow |
+| `placeholders` | 25 | — | Script placeholder reference data |
+| `users` | 1 | — | Auth users (dev user auto-seeded) |
+
 ## Development Commands
 
 ```bash
-make install      # Install all dependencies (frontend + backend)
-make dev          # Start all services in Docker
+make install                # Install all dependencies (frontend + backend)
+make dev                    # Start all services in Docker
+make seed                   # Import data + generate embeddings + create indexes
+make import-data            # Import Excel data only
+make generate-embeddings    # Generate embeddings only
+make create-vector-indexes  # Create IVFFlat indexes only
+make lint                   # Run ruff linter + formatter check
+make test                   # Run pytest
 ```
 
 ## API Endpoints
@@ -64,7 +113,6 @@ Base URL: `http://localhost:8000`
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Root endpoint |
 | `/health` | GET | Health check |
 | `/api/v1/auth/token` | POST | Login (OAuth2) |
 | `/api/v1/users/` | POST | Create user |
@@ -87,8 +135,7 @@ Copy `.env.example` to `.env` — it has working local dev defaults out of the b
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | API URL for frontend |
 | `DEFAULT_USER_EMAIL` | `dev@example.com` | Email for auto-seeded dev user |
 | `DEFAULT_USER_PASSWORD` | `dev` | Password for auto-seeded dev user |
-| `OPENAI_API_KEY` | — | OpenAI API key (for embeddings & chat) |
-| `OPENAI_CHAT_MODEL` | `gpt-4o-mini` | Model for chat completions |
+| `OPENAI_API_KEY` | — | **Required** for embeddings + chat |
 
 ## Deployment
 
@@ -104,9 +151,10 @@ make backup       # Download a database backup
 make init-ssl     # Re-initialize SSL certificate (ADMIN_EMAIL required)
 ```
 
-## Adding shadcn Components
+## Implementation Status
 
-```bash
-cd frontend/web
-pnpm dlx shadcn@latest add button dialog dropdown-menu
-```
+See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full plan.
+
+- **Phase 1 — Foundation**: Complete. Database models, data import, embeddings, vector indexes.
+- **Phase 2 — Parallel Tracks**: Next up. Backend API (CRUD endpoints), AI Agents (triage, gap detection, KB generation), Frontend (copilot, knowledge base, learning feed, dashboard).
+- **Phase 3 — Integration & Polish**: Wire agents to endpoints, connect frontend to real APIs, run evaluation.
