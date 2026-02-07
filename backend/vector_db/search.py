@@ -40,12 +40,12 @@ class VectorSearchService:
                 LEFT(body, :preview_len) AS content_preview,
                 category,
                 source_type,
-                1 - (embedding <=> :embedding::vector) AS similarity_score
+                1 - (embedding <=> CAST(:embedding AS vector)) AS similarity_score
             FROM knowledge_articles
             WHERE status = :status
               AND embedding IS NOT NULL
               {category_clause}
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :limit
         """)
         params["preview_len"] = CONTENT_PREVIEW_LENGTH
@@ -90,11 +90,11 @@ class VectorSearchService:
                 category,
                 module,
                 script_text,
-                1 - (embedding <=> :embedding::vector) AS similarity_score
+                1 - (embedding <=> CAST(:embedding AS vector)) AS similarity_score
             FROM scripts
             WHERE embedding IS NOT NULL
               {category_clause}
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :limit
         """)
 
@@ -141,11 +141,11 @@ class VectorSearchService:
                 t.root_cause,
                 t.kb_article_id,
                 t.script_id,
-                1 - (ka.embedding <=> :embedding::vector) AS similarity_score
+                1 - (ka.embedding <=> CAST(:embedding AS vector)) AS similarity_score
             FROM tickets t
             INNER JOIN knowledge_articles ka ON ka.id = t.kb_article_id
             WHERE ka.embedding IS NOT NULL
-            ORDER BY ka.embedding <=> :embedding::vector
+            ORDER BY ka.embedding <=> CAST(:embedding AS vector)
             LIMIT :limit
         """)
 
