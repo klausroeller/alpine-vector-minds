@@ -23,5 +23,10 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # Default dev user (seeded on first DB init when both email and password are set)
+    DEFAULT_USER_EMAIL: str | None = None
+    DEFAULT_USER_PASSWORD: str | None = None
+    DEFAULT_USER_NAME: str | None = None
+
 
 settings = Settings()

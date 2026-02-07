@@ -85,6 +85,8 @@ Copy `.env.example` to `.env` — it has working local dev defaults out of the b
 | `SECRET_KEY` | `dev-secret-key-...` | JWT signing key |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | API URL for frontend |
+| `DEFAULT_USER_EMAIL` | `dev@example.com` | Email for auto-seeded dev user |
+| `DEFAULT_USER_PASSWORD` | `dev` | Password for auto-seeded dev user |
 | `OPENAI_API_KEY` | — | OpenAI API key (for embeddings & chat) |
 | `OPENAI_CHAT_MODEL` | `gpt-4o-mini` | Model for chat completions |
 
