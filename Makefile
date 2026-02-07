@@ -32,11 +32,11 @@ production:
 infra:
 	cd infrastructure/terraform/environments/dev && \
 		terraform init -input=false && \
-		terraform apply -var="ssh_allowed_cidr=$$(curl -s https://checkip.amazonaws.com)/32"
+		terraform apply
 
 infra-destroy:
 	cd infrastructure/terraform/environments/dev && \
-		terraform destroy -var="ssh_allowed_cidr=0.0.0.0/0"
+		terraform destroy
 
 deploy:
 	./scripts/deploy.sh

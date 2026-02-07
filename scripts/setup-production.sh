@@ -32,21 +32,14 @@ else
   echo "==> Using existing $ENV_FILE"
 fi
 
-# ─── Step 2: Detect SSH CIDR from current public IP ────────
-echo "==> Detecting your public IP for SSH access..."
-MY_IP=$(curl -s https://checkip.amazonaws.com)
-SSH_CIDR="${MY_IP}/32"
-echo "    SSH will be restricted to: $SSH_CIDR"
-
-# ─── Step 3: Terraform init + apply ────────────────────────
+# ─── Step 2: Terraform init + apply ─────────────────────────
 echo ""
 echo "==> Running Terraform to provision infrastructure..."
 cd "$TF_DIR"
 
 terraform init -input=false
 
-terraform apply -auto-approve \
-  -var="ssh_allowed_cidr=${SSH_CIDR}"
+terraform apply -auto-approve
 
 # Extract outputs (resolve key path to absolute before cd-ing back)
 EC2_IP=$(terraform output -raw ec2_public_ip)
@@ -62,7 +55,7 @@ chmod 600 "$SHARED_KEY"
 echo "    EC2 IP: $EC2_IP"
 echo "    SSH Key: $KEY_PATH (also copied to $SHARED_KEY)"
 
-# ─── Step 4: Wait for EC2 user-data to complete ────────────
+# ─── Step 3: Wait for EC2 user-data to complete ────────────
 echo ""
 echo "==> Waiting for EC2 instance to be ready..."
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=5 -i $KEY_PATH"
@@ -80,7 +73,7 @@ for i in $(seq 1 60); do
   sleep 10
 done
 
-# ─── Step 5: Deploy code + .env to server ──────────────────
+# ─── Step 4: Deploy code + .env to server ──────────────────
 echo ""
 echo "==> Syncing project files to server..."
 rsync -avz --delete \
@@ -102,7 +95,7 @@ rsync -avz --delete \
 echo "==> Copying production environment file..."
 scp $SSH_OPTS "$ENV_FILE" "$REMOTE_USER@$EC2_IP:$REMOTE_DIR/.env"
 
-# ─── Step 6: SSL certificate acquisition ───────────────────
+# ─── Step 5: SSL certificate acquisition ───────────────────
 echo ""
 echo "==> Setting up SSL certificate..."
 ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" "
@@ -138,7 +131,7 @@ ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" "
   rm -f nginx/conf.d/_active.conf
 "
 
-# ─── Step 7: Start full production stack ────────────────────
+# ─── Step 6: Start full production stack ────────────────────
 echo ""
 echo "==> Starting production stack with HTTPS..."
 ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" "
@@ -146,7 +139,7 @@ ssh $SSH_OPTS "$REMOTE_USER@$EC2_IP" "
   docker-compose -f docker-compose.prod.yml up -d --build
 "
 
-# ─── Step 8: Wait for services and create admin ────────────
+# ─── Step 7: Wait for services and create admin ────────────
 echo ""
 echo "==> Waiting for API to be healthy..."
 for i in $(seq 1 30); do
