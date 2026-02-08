@@ -21,17 +21,27 @@ echo "  Host: $DEPLOY_HOST"
 echo "============================================"
 echo ""
 
-echo "==> Step 1/3: Importing data..."
+echo "==> Step 1/5: Importing data..."
 ssh $SSH_OPTS "$REMOTE_USER@$DEPLOY_HOST" \
   "cd $REMOTE_DIR && docker exec avm-api uv run python -m scripts.import_data"
 
 echo ""
-echo "==> Step 2/3: Generating embeddings..."
+echo "==> Step 2/5: Migrating ticket embeddings column..."
+ssh $SSH_OPTS "$REMOTE_USER@$DEPLOY_HOST" \
+  "cd $REMOTE_DIR && docker exec avm-api uv run python -m scripts.migrate_ticket_embeddings"
+
+echo ""
+echo "==> Step 3/5: Migrating QA columns..."
+ssh $SSH_OPTS "$REMOTE_USER@$DEPLOY_HOST" \
+  "cd $REMOTE_DIR && docker exec avm-api uv run python -m scripts.migrate_qa_columns"
+
+echo ""
+echo "==> Step 4/5: Generating embeddings..."
 ssh $SSH_OPTS "$REMOTE_USER@$DEPLOY_HOST" \
   "cd $REMOTE_DIR && docker exec avm-api uv run python -m scripts.generate_embeddings"
 
 echo ""
-echo "==> Step 3/3: Creating vector indexes..."
+echo "==> Step 5/5: Creating vector indexes..."
 ssh $SSH_OPTS "$REMOTE_USER@$DEPLOY_HOST" \
   "cd $REMOTE_DIR && docker exec avm-api uv run python -m scripts.create_vector_indexes"
 
