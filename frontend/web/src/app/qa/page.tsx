@@ -333,10 +333,10 @@ export default function QAPage() {
     let totalErrors = 0;
 
     try {
-      // Score in batches of 50 until none remain
+      // Score in batches of 10 until none remain
       let remaining = 1; // prime the loop
       while (remaining > 0) {
-        const result = await api.scoreAll(50);
+        const result = await api.scoreAll(10);
         totalScored += result.scored;
         totalErrors += result.errors;
         remaining = result.remaining;
