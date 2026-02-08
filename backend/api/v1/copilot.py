@@ -160,8 +160,8 @@ async def copilot_evaluate(
         classification_correct = classified_type == answer_type
 
         h1 = bool(q.target_id and q.target_id in result_ids[:1])
-        h3 = bool(q.target_id and q.target_id in result_ids[:3])
         h5 = bool(q.target_id and q.target_id in result_ids[:5])
+        h10 = bool(q.target_id and q.target_id in result_ids[:10])
 
         return EvaluationStepResponse(
             done=False,
@@ -174,8 +174,8 @@ async def copilot_evaluate(
             classification_correct=classification_correct,
             target_id=q.target_id,
             hit_at_1=h1,
-            hit_at_3=h3,
             hit_at_5=h5,
+            hit_at_10=h10,
             error=False,
         )
     except Exception:

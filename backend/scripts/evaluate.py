@@ -129,8 +129,8 @@ def aggregate_results(steps: list[dict]) -> dict:
     total = len(steps)
     correct_classifications = 0
     hit_at_1 = 0
-    hit_at_3 = 0
     hit_at_5 = 0
+    hit_at_10 = 0
     questions_with_targets = 0
     errors = 0
 
@@ -146,14 +146,14 @@ def aggregate_results(steps: list[dict]) -> dict:
         difficulty = s.get("difficulty") or "UNKNOWN"
 
         if answer_type not in type_stats:
-            type_stats[answer_type] = {"count": 0, "hit_at_1": 0, "hit_at_3": 0}
+            type_stats[answer_type] = {"count": 0, "hit_at_1": 0, "hit_at_5": 0}
         type_stats[answer_type]["count"] += 1
 
         if difficulty not in difficulty_stats:
             difficulty_stats[difficulty] = {
                 "count": 0,
                 "hit_at_1": 0,
-                "hit_at_3": 0,
+                "hit_at_5": 0,
                 "classification_correct": 0,
             }
         difficulty_stats[difficulty]["count"] += 1
@@ -166,19 +166,19 @@ def aggregate_results(steps: list[dict]) -> dict:
             questions_with_targets += 1
             if s.get("hit_at_1"):
                 hit_at_1 += 1
-                hit_at_3 += 1
                 hit_at_5 += 1
+                hit_at_10 += 1
                 type_stats[answer_type]["hit_at_1"] += 1
-                type_stats[answer_type]["hit_at_3"] += 1
+                type_stats[answer_type]["hit_at_5"] += 1
                 difficulty_stats[difficulty]["hit_at_1"] += 1
-                difficulty_stats[difficulty]["hit_at_3"] += 1
-            elif s.get("hit_at_3"):
-                hit_at_3 += 1
-                hit_at_5 += 1
-                type_stats[answer_type]["hit_at_3"] += 1
-                difficulty_stats[difficulty]["hit_at_3"] += 1
+                difficulty_stats[difficulty]["hit_at_5"] += 1
             elif s.get("hit_at_5"):
                 hit_at_5 += 1
+                hit_at_10 += 1
+                type_stats[answer_type]["hit_at_5"] += 1
+                difficulty_stats[difficulty]["hit_at_5"] += 1
+            elif s.get("hit_at_10"):
+                hit_at_10 += 1
 
     non_error = total - errors
     by_answer_type = {}
@@ -187,7 +187,7 @@ def aggregate_results(steps: list[dict]) -> dict:
         by_answer_type[at] = {
             "count": count,
             "hit_at_1": stats["hit_at_1"] / count if count > 0 else 0.0,
-            "hit_at_3": stats["hit_at_3"] / count if count > 0 else 0.0,
+            "hit_at_5": stats["hit_at_5"] / count if count > 0 else 0.0,
         }
 
     by_difficulty = {}
@@ -197,7 +197,7 @@ def aggregate_results(steps: list[dict]) -> dict:
             "count": count,
             "classification_correct": stats["classification_correct"] / count if count > 0 else 0.0,
             "hit_at_1": stats["hit_at_1"] / count if count > 0 else 0.0,
-            "hit_at_3": stats["hit_at_3"] / count if count > 0 else 0.0,
+            "hit_at_5": stats["hit_at_5"] / count if count > 0 else 0.0,
         }
 
     return {
@@ -205,8 +205,8 @@ def aggregate_results(steps: list[dict]) -> dict:
         "classification_accuracy": correct_classifications / non_error if non_error > 0 else 0.0,
         "retrieval_accuracy": {
             "hit_at_1": hit_at_1 / questions_with_targets if questions_with_targets > 0 else 0.0,
-            "hit_at_3": hit_at_3 / questions_with_targets if questions_with_targets > 0 else 0.0,
             "hit_at_5": hit_at_5 / questions_with_targets if questions_with_targets > 0 else 0.0,
+            "hit_at_10": hit_at_10 / questions_with_targets if questions_with_targets > 0 else 0.0,
         },
         "by_answer_type": by_answer_type,
         "by_difficulty": by_difficulty,
@@ -234,29 +234,29 @@ def generate_markdown(data: dict, env: str, base_url: str) -> str:
         "|-------------------------|--------|",
         f"| Classification Accuracy | {pct(data['classification_accuracy'])} |",
         f"| Retrieval Hit@1         | {pct(ra['hit_at_1'])} |",
-        f"| Retrieval Hit@3         | {pct(ra['hit_at_3'])} |",
         f"| Retrieval Hit@5         | {pct(ra['hit_at_5'])} |",
+        f"| Retrieval Hit@10        | {pct(ra['hit_at_10'])} |",
         "",
         "## By Answer Type",
         "",
-        "| Type               | Count | Hit@1 | Hit@3 |",
+        "| Type               | Count | Hit@1 | Hit@5 |",
         "|--------------------|-------|-------|-------|",
     ]
     for answer_type, stats in sorted(data.get("by_answer_type", {}).items()):
         lines.append(
-            f"| {answer_type:<18} | {stats['count']:>5} | {pct(stats['hit_at_1']):>5} | {pct(stats['hit_at_3']):>5} |"
+            f"| {answer_type:<18} | {stats['count']:>5} | {pct(stats['hit_at_1']):>5} | {pct(stats['hit_at_5']):>5} |"
         )
     lines.append("")
 
     lines.extend([
         "## By Difficulty",
         "",
-        "| Difficulty         | Count | Classification | Hit@1 | Hit@3 |",
+        "| Difficulty         | Count | Classification | Hit@1 | Hit@5 |",
         "|--------------------|-------|----------------|-------|-------|",
     ])
     for difficulty, stats in sorted(data.get("by_difficulty", {}).items()):
         lines.append(
-            f"| {difficulty:<18} | {stats['count']:>5} | {pct(stats['classification_correct']):>14} | {pct(stats['hit_at_1']):>5} | {pct(stats['hit_at_3']):>5} |"
+            f"| {difficulty:<18} | {stats['count']:>5} | {pct(stats['classification_correct']):>14} | {pct(stats['hit_at_1']):>5} | {pct(stats['hit_at_5']):>5} |"
         )
     lines.append("")
     return "\n".join(lines)

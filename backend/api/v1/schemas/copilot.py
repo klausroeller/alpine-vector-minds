@@ -40,13 +40,13 @@ class CopilotAskResponse(BaseModel):
 class ByAnswerTypeStats(BaseModel):
     count: int
     hit_at_1: float
-    hit_at_3: float
+    hit_at_5: float
 
 
 class RetrievalAccuracy(BaseModel):
     hit_at_1: float
-    hit_at_3: float
     hit_at_5: float
+    hit_at_10: float
 
 
 class EvaluationStepResponse(BaseModel):
@@ -60,8 +60,8 @@ class EvaluationStepResponse(BaseModel):
     classification_correct: bool | None = None
     target_id: str | None = None
     hit_at_1: bool | None = None
-    hit_at_3: bool | None = None
     hit_at_5: bool | None = None
+    hit_at_10: bool | None = None
     error: bool = False
 
 

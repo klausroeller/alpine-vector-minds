@@ -75,7 +75,7 @@ class TriageAgent(BaseAgent):
         secondary_results, _ = await self.search_service.search_all(
             query_embedding,
             answer_type=secondary_type,
-            limit=2,
+            limit=5,
         )
 
         # Combine results with source_type tagging
