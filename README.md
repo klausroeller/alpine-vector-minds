@@ -77,7 +77,6 @@ Access the API docs at http://localhost:8000/docs once running.
 ├── infrastructure/
 │   └── terraform/            # AWS infrastructure as code
 ├── docs/
-│   ├── IMPLEMENTATION_PLAN.md  # Full implementation plan
 │   └── CHANGELOG/            # Changelog entries
 └── .github/workflows/        # CI/CD pipelines
 ```
@@ -186,12 +185,3 @@ make backup       # Download a database backup
 make init-ssl     # Re-initialize SSL certificate (ADMIN_EMAIL required)
 ```
 
-## Implementation Status
-
-See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full plan.
-
-- **Phase 1 — Foundation**: Complete. Database models, data import, embeddings, vector indexes.
-- **Phase 2A — Backend API**: Complete. CRUD endpoints for knowledge, learning, dashboard, copilot.
-- **Phase 2B — AI Agents**: Complete. Triage agent, gap detection, KB generation, vector search service.
-- **Phase 2C — Frontend**: Complete. Sidebar layout, dashboard, copilot, knowledge base, learning feed pages.
-- **Phase 3 — Integration & Polish**: Complete. Copilot wired to TriageAgent with provenance enrichment, detect-gap wired to GapDetection + KBGeneration agents, embedding generation on article approval, ground-truth evaluation endpoint.
