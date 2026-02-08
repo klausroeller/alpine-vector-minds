@@ -58,12 +58,13 @@ seed-production:
 	./scripts/seed-production.sh
 
 # Run copilot accuracy evaluation and save reports to data/evaluation-reports/
-#   make evaluate ENV=dev EVAL_LIMIT=5 EVAL_START=0 EVAL_EMAIL=dev@example.com EVAL_PASSWORD=dev
+#   make evaluate ENV=dev EVAL_LIMIT=5 EVAL_START=0 EVAL_MODE=research
 evaluate:
 	cd backend && uv run python -m scripts.evaluate \
 		--env $(or $(ENV),dev) \
 		$(if $(EVAL_LIMIT),--limit $(EVAL_LIMIT),) \
 		$(if $(EVAL_START),--start $(EVAL_START),) \
+		$(if $(EVAL_MODE),--mode $(EVAL_MODE),) \
 		$(if $(BASE_URL),--base-url $(BASE_URL),) \
 		$(if $(EVAL_EMAIL),--email $(EVAL_EMAIL),) \
 		$(if $(EVAL_PASSWORD),--password $(EVAL_PASSWORD),)

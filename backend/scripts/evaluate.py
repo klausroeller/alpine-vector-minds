@@ -45,6 +45,12 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="0-based question index to start evaluation from (default: 0)",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["ask", "research"],
+        default="ask",
+        help="Evaluation mode: 'ask' uses /evaluate, 'research' uses /evaluate-research (default: ask)",
+    )
     return parser.parse_args()
 
 
@@ -90,10 +96,13 @@ def print_progress(index: int, total: int) -> None:
     sys.stdout.flush()
 
 
-async def _fetch_one(client: httpx.AsyncClient, base_url: str, headers: dict, index: int) -> dict:
+async def _fetch_one(
+    client: httpx.AsyncClient, base_url: str, headers: dict, index: int, mode: str = "ask"
+) -> dict:
     """Fetch a single evaluation step."""
+    endpoint = "evaluate-research" if mode == "research" else "evaluate"
     resp = await client.get(
-        f"{base_url}/api/v1/copilot/evaluate",
+        f"{base_url}/api/v1/copilot/{endpoint}",
         params={"index": index},
         headers=headers,
         timeout=PER_QUESTION_TIMEOUT_SECONDS,
@@ -104,7 +113,12 @@ async def _fetch_one(client: httpx.AsyncClient, base_url: str, headers: dict, in
 
 
 async def run_evaluation(
-    client: httpx.AsyncClient, base_url: str, token: str, limit: int, start: int = 0
+    client: httpx.AsyncClient,
+    base_url: str,
+    token: str,
+    limit: int,
+    start: int = 0,
+    mode: str = "ask",
 ) -> list[dict]:
     """Call the per-question evaluation endpoint in concurrent batches."""
     headers = {"Authorization": f"Bearer {token}"}
@@ -118,7 +132,7 @@ async def run_evaluation(
 
     async def _limited_fetch(idx: int) -> dict:
         async with semaphore:
-            return await _fetch_one(client, base_url, headers, idx)
+            return await _fetch_one(client, base_url, headers, idx, mode=mode)
 
     for batch_start in range(0, total_to_eval, batch_size):
         batch_indices = indices[batch_start : batch_start + batch_size]
@@ -289,13 +303,18 @@ async def async_main() -> None:
     base_url = resolve_base_url(args)
     email, password = resolve_credentials(args)
 
-    print(f"Evaluating {args.env} at {base_url} (start: {args.start}, limit: {args.limit})")
+    print(
+        f"Evaluating {args.env} at {base_url} "
+        f"(start: {args.start}, limit: {args.limit}, mode: {args.mode})"
+    )
 
     async with httpx.AsyncClient() as client:
         print("Authenticating...")
         token = await authenticate(client, base_url, email, password)
 
-        steps = await run_evaluation(client, base_url, token, args.limit, start=args.start)
+        steps = await run_evaluation(
+            client, base_url, token, args.limit, start=args.start, mode=args.mode
+        )
 
     if not steps:
         print("No questions evaluated.")

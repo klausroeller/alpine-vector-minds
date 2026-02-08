@@ -3,7 +3,8 @@
 A **self-learning support intelligence layer** for the RealPage SupportMind AI hackathon challenge. Two hero features:
 
 1. **Intelligent Triage Copilot** — Classify support questions, retrieve best-match answers via hybrid search (semantic + full-text with RRF), LLM query rewriting, and LLM reranking
-2. **Self-Learning Knowledge Loop** — Detect knowledge gaps from resolved tickets, auto-generate draft KB articles, human-in-the-loop review
+2. **Deep Research** — Agentic multi-step research: decomposes complex queries into sub-queries, runs parallel searches across pools, and synthesizes structured reports with evidence and source attribution
+3. **Self-Learning Knowledge Loop** — Detect knowledge gaps from resolved tickets, auto-generate draft KB articles, human-in-the-loop review
 
 **Authors**: Dr. Volker Pernice and Dr. Klaus Röller
 
@@ -132,7 +133,9 @@ Base URL: `http://localhost:8000`
 | `/api/v1/learning/events` | GET | List learning events (auth required) |
 | `/api/v1/learning/review/{id}` | POST | Approve/reject learning event (auth required) |
 | `/api/v1/copilot/ask` | POST | Copilot triage + vector search (auth required) |
+| `/api/v1/copilot/research` | POST | Deep research: decompose, parallel search, synthesize report (auth required) |
 | `/api/v1/copilot/evaluate` | GET | Run ground-truth evaluation (auth required) |
+| `/api/v1/copilot/evaluate-research` | GET | Run evaluation using deep research agent (auth required) |
 | `/api/v1/copilot/feedback` | POST | Submit feedback on search result (auth required) |
 | `/api/v1/learning/detect-gap` | POST | Detect knowledge gap from ticket (auth required) |
 | `/api/v1/qa/score/{id}` | POST | Score a conversation with QA rubric (auth required) |
@@ -147,7 +150,7 @@ API docs: `/docs` (Swagger) or `/redoc`
 | Route | Description |
 |-------|-------------|
 | `/dashboard` | Metrics overview with charts, QA quality, system accuracy, feedback |
-| `/copilot` | AI-powered search with thumbs-up/down feedback buttons |
+| `/copilot` | AI-powered search with Quick Search, Deep Research modes, and feedback |
 | `/knowledge` | Knowledge base list with search, filters, pagination |
 | `/knowledge/[id]` | Article detail with provenance chain |
 | `/learning` | Learning feed with status tabs and approve/reject workflow |

@@ -264,6 +264,44 @@ export interface CopilotResponse {
   metadata: Record<string, unknown>;
 }
 
+// --- Deep Research ---
+
+export interface SubQueryInfo {
+  query: string;
+  pool: string;
+  aspect: string;
+}
+
+export interface EvidenceItem {
+  source_id: string;
+  source_type: string;
+  title: string;
+  relevance: string;
+  content_preview: string;
+}
+
+export interface RelatedResource {
+  source_id: string;
+  source_type: string;
+  title: string;
+  why_relevant: string;
+}
+
+export interface ResearchReport {
+  summary: string;
+  evidence: EvidenceItem[];
+  related_resources: RelatedResource[];
+}
+
+export interface CopilotResearchResponse {
+  mode: 'simple' | 'research';
+  classification?: Classification;
+  results?: SearchResult[];
+  report?: ResearchReport;
+  sub_queries?: SubQueryInfo[];
+  metadata: Record<string, unknown>;
+}
+
 export const api = {
   login: async (email: string, password: string): Promise<TokenResponse> => {
     const body = new URLSearchParams({ username: email, password });
@@ -353,6 +391,13 @@ export const api = {
   // Copilot
   copilotAsk: async (question: string): Promise<CopilotResponse> => {
     return request<CopilotResponse>('/api/v1/copilot/ask', {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    });
+  },
+
+  copilotResearch: async (question: string): Promise<CopilotResearchResponse> => {
+    return request<CopilotResearchResponse>('/api/v1/copilot/research', {
       method: 'POST',
       body: JSON.stringify({ question }),
     });

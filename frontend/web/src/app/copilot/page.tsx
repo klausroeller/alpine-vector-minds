@@ -4,16 +4,19 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Brain } from 'lucide-react';
 import { AppLayout } from '@/components/layout/app-layout';
-import { SearchBar } from '@/components/copilot/search-bar';
+import { SearchBar, type CopilotMode } from '@/components/copilot/search-bar';
 import { ClassificationBadge } from '@/components/copilot/classification-badge';
 import { ResultCard } from '@/components/copilot/result-card';
-import { api, ApiError, type CopilotResponse } from '@/lib/api';
+import { ResearchReportView } from '@/components/copilot/research-report';
+import { api, ApiError, type CopilotResponse, type CopilotResearchResponse } from '@/lib/api';
 
 function CopilotContent() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<CopilotMode>('quick');
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<CopilotResponse | null>(null);
+  const [researchResponse, setResearchResponse] = useState<CopilotResearchResponse | null>(null);
   const [resultsVisible, setResultsVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
@@ -35,14 +38,19 @@ function CopilotContent() {
     if (!query.trim() || loading) return;
     setLoading(true);
     setResponse(null);
+    setResearchResponse(null);
     setResultsVisible(false);
     setError(null);
     setFeedback({});
 
     try {
-      const data = await api.copilotAsk(query.trim());
-      setResponse(data);
-      // Stagger animation: show results after a brief delay
+      if (mode === 'research') {
+        const data = await api.copilotResearch(query.trim());
+        setResearchResponse(data);
+      } else {
+        const data = await api.copilotAsk(query.trim());
+        setResponse(data);
+      }
       requestAnimationFrame(() => {
         setTimeout(() => setResultsVisible(true), 50);
       });
@@ -51,7 +59,7 @@ function CopilotContent() {
     } finally {
       setLoading(false);
     }
-  }, [query, loading]);
+  }, [query, loading, mode]);
 
   // Pre-fill and auto-search from ?q= URL param
   useEffect(() => {
@@ -64,12 +72,20 @@ function CopilotContent() {
 
   // Trigger search once query is set from URL param
   useEffect(() => {
-    if (autoSearchTriggered.current && query && !loading && !response) {
+    if (autoSearchTriggered.current && query && !loading && !response && !researchResponse) {
       handleSubmit();
     }
     // Only run when query changes after auto-fill
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  // Determine what to render
+  const hasQuickResponse = response !== null;
+  const hasResearchResponse = researchResponse !== null;
+  const hasAnyResponse = hasQuickResponse || hasResearchResponse;
+
+  // Research response that fell back to simple mode
+  const researchSimple = researchResponse?.mode === 'simple';
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
@@ -88,6 +104,8 @@ function CopilotContent() {
         onChange={setQuery}
         onSubmit={handleSubmit}
         loading={loading}
+        mode={mode}
+        onModeChange={setMode}
       />
 
       {/* Results area */}
@@ -98,15 +116,13 @@ function CopilotContent() {
           </div>
         )}
 
-        {response && (
+        {/* Quick search results */}
+        {hasQuickResponse && (
           <div className="space-y-6">
-            {/* Classification */}
             <ClassificationBadge
               classification={response.classification}
               visible={resultsVisible}
             />
-
-            {/* Results */}
             {response.results.length === 0 ? (
               <p className="text-sm text-slate-500">
                 No results found. Try rephrasing your question.
@@ -130,8 +146,39 @@ function CopilotContent() {
           </div>
         )}
 
+        {/* Research response — simple fallback */}
+        {hasResearchResponse && researchSimple && researchResponse.classification && (
+          <div className="space-y-6">
+            <ClassificationBadge
+              classification={researchResponse.classification}
+              visible={resultsVisible}
+            />
+            {(!researchResponse.results || researchResponse.results.length === 0) ? (
+              <p className="text-sm text-slate-500">
+                No results found. Try rephrasing your question.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {researchResponse.results.map((result, i) => (
+                  <ResultCard
+                    key={result.source_id}
+                    result={result}
+                    index={i}
+                    visible={resultsVisible}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Research response — full report */}
+        {hasResearchResponse && !researchSimple && (
+          <ResearchReportView response={researchResponse} visible={resultsVisible} />
+        )}
+
         {/* Empty state */}
-        {!response && !loading && !error && (
+        {!hasAnyResponse && !loading && !error && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500/10 to-cyan-500/5 ring-1 ring-teal-500/10">
               <Brain className="h-7 w-7 text-teal-500/60" />

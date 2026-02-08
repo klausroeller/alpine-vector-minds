@@ -65,6 +65,52 @@ class EvaluationStepResponse(BaseModel):
     error: bool = False
 
 
+# --- Deep Research ---
+
+
+class CopilotResearchRequest(BaseModel):
+    question: str
+
+
+class SubQueryInfo(BaseModel):
+    query: str
+    pool: str
+    aspect: str
+
+
+class EvidenceItem(BaseModel):
+    source_id: str
+    source_type: str
+    title: str
+    relevance: str
+    content_preview: str
+
+
+class RelatedResource(BaseModel):
+    source_id: str
+    source_type: str
+    title: str
+    why_relevant: str
+
+
+class ResearchReport(BaseModel):
+    summary: str
+    evidence: list[EvidenceItem]
+    related_resources: list[RelatedResource]
+
+
+class CopilotResearchResponse(BaseModel):
+    mode: str  # "simple" | "research"
+    classification: Classification | None = None
+    results: list[SearchResult] | None = None
+    report: ResearchReport | None = None
+    sub_queries: list[SubQueryInfo] | None = None
+    metadata: dict[str, Any]
+
+
+# --- Evaluation ---
+
+
 class EvaluationResponse(BaseModel):
     total_questions: int
     classification_accuracy: float
