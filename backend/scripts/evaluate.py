@@ -1,6 +1,7 @@
 """Run copilot evaluation and save reports to data/evaluation-reports/."""
 
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -18,6 +19,7 @@ DEV_EMAIL = "dev@example.com"
 DEV_PASSWORD = "dev"
 
 PER_QUESTION_TIMEOUT_SECONDS = 120
+MAX_CONCURRENT_REQUESTS = 5
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,9 +68,9 @@ def resolve_credentials(args: argparse.Namespace) -> tuple[str, str]:
     sys.exit(1)
 
 
-def authenticate(client: httpx.Client, base_url: str, email: str, password: str) -> str:
+async def authenticate(client: httpx.AsyncClient, base_url: str, email: str, password: str) -> str:
     """Authenticate and return the access token."""
-    resp = client.post(
+    resp = await client.post(
         f"{base_url}/api/v1/auth/token",
         data={"username": email, "password": password},
     )
@@ -88,37 +90,57 @@ def print_progress(index: int, total: int) -> None:
     sys.stdout.flush()
 
 
-def run_evaluation(
-    client: httpx.Client, base_url: str, token: str, limit: int, start: int = 0
-) -> list[dict]:
-    """Call the per-question evaluation endpoint in a loop, returning all step results."""
-    headers = {"Authorization": f"Bearer {token}"}
-    results = []
-    index = start
-    end = start + limit
+async def _fetch_one(
+    client: httpx.AsyncClient, base_url: str, headers: dict, index: int
+) -> dict:
+    """Fetch a single evaluation step."""
+    resp = await client.get(
+        f"{base_url}/api/v1/copilot/evaluate",
+        params={"index": index},
+        headers=headers,
+        timeout=PER_QUESTION_TIMEOUT_SECONDS,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Evaluation failed ({resp.status_code}): {resp.text}")
+    return resp.json()
 
-    while index < end:
-        resp = client.get(
-            f"{base_url}/api/v1/copilot/evaluate",
-            params={"index": index},
-            headers=headers,
-            timeout=PER_QUESTION_TIMEOUT_SECONDS,
-        )
-        if resp.status_code != 200:
-            print(f"\nERROR: Evaluation failed ({resp.status_code}): {resp.text}")
+
+async def run_evaluation(
+    client: httpx.AsyncClient, base_url: str, token: str, limit: int, start: int = 0
+) -> list[dict]:
+    """Call the per-question evaluation endpoint in concurrent batches."""
+    headers = {"Authorization": f"Bearer {token}"}
+    results: list[dict] = []
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
+    # Build list of indices to evaluate
+    indices = list(range(start, start + limit))
+    total_to_eval = len(indices)
+    batch_size = max(1, total_to_eval // 10)
+
+    async def _limited_fetch(idx: int) -> dict:
+        async with semaphore:
+            return await _fetch_one(client, base_url, headers, idx)
+
+    for batch_start in range(0, total_to_eval, batch_size):
+        batch_indices = indices[batch_start : batch_start + batch_size]
+        tasks = [_limited_fetch(idx) for idx in batch_indices]
+        try:
+            batch_results = await asyncio.gather(*tasks)
+        except RuntimeError as exc:
+            print(f"\n{exc}")
             sys.exit(1)
 
-        step = resp.json()
+        for step in batch_results:
+            if step.get("done"):
+                # Server says no more questions — stop collecting
+                evaluated = len(results)
+                print_progress(evaluated, evaluated)
+                print()
+                return results
+            results.append(step)
 
-        if step.get("done"):
-            total = step["total"]
-            evaluated = min(total, end) - start
-            print_progress(evaluated, evaluated)
-            break
-
-        results.append(step)
-        print_progress(index - start + 1, min(step["total"] - start, limit))
-        index += 1
+        print_progress(len(results), total_to_eval)
 
     print()  # newline after progress bar
     return results
@@ -262,18 +284,18 @@ def generate_markdown(data: dict, env: str, base_url: str) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
+async def async_main() -> None:
     args = parse_args()
     base_url = resolve_base_url(args)
     email, password = resolve_credentials(args)
 
     print(f"Evaluating {args.env} at {base_url} (start: {args.start}, limit: {args.limit})")
 
-    with httpx.Client() as client:
+    async with httpx.AsyncClient() as client:
         print("Authenticating...")
-        token = authenticate(client, base_url, email, password)
+        token = await authenticate(client, base_url, email, password)
 
-        steps = run_evaluation(client, base_url, token, args.limit, start=args.start)
+        steps = await run_evaluation(client, base_url, token, args.limit, start=args.start)
 
     if not steps:
         print("No questions evaluated.")
@@ -298,6 +320,10 @@ def main() -> None:
     # Print summary
     print()
     print(md_content)
+
+
+def main() -> None:
+    asyncio.run(async_main())
 
 
 if __name__ == "__main__":

@@ -148,14 +148,13 @@ async def copilot_evaluate(
     answer_type = q.answer_type or "UNKNOWN"
 
     try:
-        embedding_service = EmbeddingService()
-        search_service = VectorSearchService(db)
-        triage_agent = TriageAgent(db, embedding_service, search_service)
-
-        response = await triage_agent.run([AgentMessage(role="user", content=q.question_text)])
-        payload = json.loads(response.content)
-        classified_type = payload["classification"]["answer_type"]
-        result_ids = [r.get("id", "") for r in payload.get("results", [])]
+        response = await copilot_ask(
+            CopilotAskRequest(question=q.question_text),
+            _current_user,
+            db,
+        )
+        classified_type = response.classification.answer_type
+        result_ids = [r.source_id for r in response.results]
 
         classification_correct = classified_type == answer_type
 

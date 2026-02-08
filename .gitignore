@@ -224,3 +224,4 @@ certbot/
 backups/
 /data/
 !/data/.git.keep
+/scratch/
