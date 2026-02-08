@@ -2,6 +2,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from agents.deep_research import DeepResearchAgent
 from agents.triage import TriageAgent
 from api.v1.auth import get_current_user
 from api.v1.schemas.copilot import (
+    AIAnswer,
     Classification,
     CopilotAskRequest,
     CopilotAskResponse,
@@ -26,6 +28,7 @@ from api.v1.schemas.copilot import (
 )
 from vector_db.database import get_db
 from vector_db.embeddings import EmbeddingService
+from vector_db.embeddings import settings as embedding_settings
 from vector_db.models.copilot_feedback import CopilotFeedback
 from vector_db.models.kb_lineage import KBLineage
 from vector_db.models.question import Question
@@ -33,6 +36,57 @@ from vector_db.models.user import User
 from vector_db.search import VectorSearchService
 
 logger = logging.getLogger(__name__)
+
+_ANSWER_MODEL = "gpt-4o-mini"
+
+_ANSWER_SYSTEM_PROMPT = """\
+You are a support copilot for RealPage PropertySuite Affordable.
+Given a support agent's question and the top matching resource from the knowledge base, \
+write a concise, actionable answer the agent can use immediately.
+
+Rules:
+- Be direct and practical — the agent needs to act fast
+- Reference source IDs in square brackets, e.g. [KB-123] or [SCRIPT-45]
+- For KB articles: summarize the key steps or information
+- For scripts: explain what the script does, list required placeholders, and note any prerequisites
+- For ticket resolutions: summarize what was done to resolve the issue
+- Keep the answer to 2-4 sentences
+- Do NOT add disclaimers or caveats\
+"""
+
+
+async def _generate_ai_answer(
+    question: str, results: list[SearchResult],
+) -> AIAnswer | None:
+    """Generate a synthesized answer from the top search results."""
+    if not results:
+        return None
+
+    top = results[0]
+    context = f"Source: [{top.source_id}] {top.title}\nType: {top.source_type}\n\n{top.content_preview}"
+
+    # Include second result if available and high-scoring
+    source_ids = [top.source_id]
+    if len(results) > 1 and results[1].similarity_score > 0.7:
+        r2 = results[1]
+        context += f"\n\n---\nSource: [{r2.source_id}] {r2.title}\nType: {r2.source_type}\n\n{r2.content_preview}"
+        source_ids.append(r2.source_id)
+
+    try:
+        client = AsyncOpenAI(api_key=embedding_settings.OPENAI_API_KEY)
+        completion = await client.chat.completions.create(
+            model=_ANSWER_MODEL,
+            messages=[
+                {"role": "system", "content": _ANSWER_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Question: {question}\n\n{context}"},
+            ],
+            max_tokens=300,
+        )
+        text = completion.choices[0].message.content or ""
+        return AIAnswer(text=text.strip(), source_ids=source_ids)
+    except Exception:
+        logger.exception("AI answer generation failed")
+        return None
 
 router = APIRouter()
 
@@ -132,8 +186,11 @@ async def copilot_ask(
 
     results = await _build_search_results(db, raw_results)
 
+    ai_answer = await _generate_ai_answer(request.question, results)
+
     return CopilotAskResponse(
         classification=classification,
+        ai_answer=ai_answer,
         results=results,
         metadata=response.metadata,
     )

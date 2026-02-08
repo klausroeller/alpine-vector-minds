@@ -31,8 +31,14 @@ class SearchResult(BaseModel):
     provenance: ProvenanceInfo | None = None
 
 
+class AIAnswer(BaseModel):
+    text: str
+    source_ids: list[str]
+
+
 class CopilotAskResponse(BaseModel):
     classification: Classification
+    ai_answer: AIAnswer | None = None
     results: list[SearchResult]
     metadata: dict[str, Any]
 

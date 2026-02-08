@@ -258,8 +258,14 @@ export interface SearchResult {
   provenance: ProvenanceInfo | null;
 }
 
+export interface AIAnswer {
+  text: string;
+  source_ids: string[];
+}
+
 export interface CopilotResponse {
   classification: Classification;
+  ai_answer: AIAnswer | null;
   results: SearchResult[];
   metadata: Record<string, unknown>;
 }

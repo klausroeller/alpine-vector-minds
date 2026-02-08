@@ -7,6 +7,7 @@ import { AppLayout } from '@/components/layout/app-layout';
 import { SearchBar, type CopilotMode } from '@/components/copilot/search-bar';
 import { ClassificationBadge } from '@/components/copilot/classification-badge';
 import { ResultCard } from '@/components/copilot/result-card';
+import { AIAnswerCard } from '@/components/copilot/ai-answer-card';
 import { ResearchReportView } from '@/components/copilot/research-report';
 import { api, ApiError, type CopilotResponse, type CopilotResearchResponse } from '@/lib/api';
 
@@ -123,6 +124,11 @@ function CopilotContent() {
               classification={response.classification}
               visible={resultsVisible}
             />
+
+            {/* AI Answer */}
+            {response.ai_answer && (
+              <AIAnswerCard answer={response.ai_answer} visible={resultsVisible} />
+            )}
             {response.results.length === 0 ? (
               <p className="text-sm text-slate-500">
                 No results found. Try rephrasing your question.
