@@ -126,12 +126,17 @@ class DeepResearchAgent(BaseAgent):
         # Step 3: Parallel search
         merged_results = await self._parallel_search(sub_queries)
 
-        # Step 4: Synthesize
-        report = await self._synthesize(question, merged_results)
+        # Step 4: Classify (same LLM call as ask mode) + Synthesize in parallel
+        classification, report = await asyncio.gather(
+            self.triage_agent._classify(question),
+            self._synthesize(question, merged_results),
+        )
 
         total_ms = (time.perf_counter() - start_time) * 1000
         result = {
             "mode": "research",
+            "classification": classification,
+            "results": merged_results[:10],
             "report": report,
             "sub_queries": sub_queries,
         }

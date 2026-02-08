@@ -88,13 +88,13 @@ function CopilotContent() {
   // Research response that fell back to simple mode
   const researchSimple = researchResponse?.mode === 'simple';
 
-  // Right-column data: result cards + classification badge
+  // Right-column data: result cards + classification badge (all modes)
   const rightColumnResults = hasQuickResponse
     ? response.results
-    : (hasResearchResponse && researchSimple && researchResponse.results) ? researchResponse.results : [];
+    : (hasResearchResponse && researchResponse.results) ? researchResponse.results : [];
   const rightColumnClassification = hasQuickResponse
     ? response.classification
-    : (hasResearchResponse && researchSimple) ? researchResponse.classification : null;
+    : (hasResearchResponse && researchResponse.classification) ? researchResponse.classification : null;
   const hasResultCards = rightColumnResults.length > 0;
   const showFullReport = hasResearchResponse && !researchSimple;
 
@@ -140,7 +140,7 @@ function CopilotContent() {
                 No results found. Try rephrasing your question.
               </p>
             )}
-            {hasResearchResponse && researchSimple && (!researchResponse.results || researchResponse.results.length === 0) && (
+            {hasResearchResponse && (!researchResponse.results || researchResponse.results.length === 0) && (
               <p className="text-sm text-slate-500">
                 No results found. Try rephrasing your question.
               </p>

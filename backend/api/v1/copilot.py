@@ -226,7 +226,15 @@ async def copilot_research(
             metadata=response.metadata,
         )
 
-    # Research mode
+    # Research mode — extract classification + ranked results (same shape as simple)
+    classification_data = payload.get("classification", {})
+    classification = Classification(
+        answer_type=classification_data.get("answer_type", "KB"),
+        confidence=classification_data.get("confidence", 0.5),
+        reasoning=classification_data.get("reasoning", ""),
+    )
+    results = await _build_search_results(db, payload.get("results", []))
+
     raw_report = payload.get("report", {})
     report = ResearchReport(
         summary=raw_report.get("summary", ""),
@@ -266,6 +274,8 @@ async def copilot_research(
 
     return CopilotResearchResponse(
         mode="research",
+        classification=classification,
+        results=results,
         report=report,
         sub_queries=sub_queries,
         metadata=response.metadata,
@@ -369,18 +379,11 @@ async def copilot_evaluate_research(
             db,
         )
 
-        # Extract result IDs depending on mode
-        if response.mode == "simple":
-            classified_type = (
-                response.classification.answer_type if response.classification else "KB"
-            )
-            result_ids = [r.source_id for r in (response.results or [])]
-        else:
-            classified_type = "RESEARCH"
-            result_ids = []
-            if response.report:
-                result_ids.extend(e.source_id for e in response.report.evidence)
-                result_ids.extend(r.source_id for r in response.report.related_resources)
+        # Both simple and research modes now carry classification + results
+        classified_type = (
+            response.classification.answer_type if response.classification else "KB"
+        )
+        result_ids = [r.source_id for r in (response.results or [])]
 
         classification_correct = classified_type == answer_type
 
