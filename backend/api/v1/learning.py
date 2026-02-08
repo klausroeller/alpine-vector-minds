@@ -239,13 +239,15 @@ async def detect_gap(
 
     # Create draft KB article
     kb_id = _generate_kb_id()
-    embed_text = article_data["title"] + EMBEDDING_TEXT_SEPARATOR + article_data["body"]
+    title = article_data.get("title") or "Untitled"
+    body = article_data.get("body") or ""
+    embed_text = title + EMBEDDING_TEXT_SEPARATOR + body
     embedding = await embedding_service.embed(embed_text)
 
     kb_article = KnowledgeArticle(
         id=kb_id,
-        title=article_data["title"],
-        body=article_data["body"],
+        title=title,
+        body=body,
         category=article_data.get("category", ticket.category),
         module=ticket.module,
         status=ArticleStatus.DRAFT,
@@ -303,8 +305,8 @@ async def detect_gap(
         detected_gap=gap_data.get("gap_description", ""),
         proposed_article=ProposedArticle(
             id=kb_id,
-            title=article_data["title"],
-            body=article_data["body"],
+            title=title,
+            body=body,
             status=ArticleStatus.DRAFT,
         ),
     )

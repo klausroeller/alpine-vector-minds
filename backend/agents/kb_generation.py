@@ -87,9 +87,9 @@ class KBGenerationAgent(BaseAgent):
             raw = strip_markdown_fences(raw)
             parsed = json.loads(raw)
             return {
-                "title": parsed.get("title", data.get("suggested_title", "Untitled")),
-                "body": parsed.get("body", ""),
-                "category": parsed.get("category", data.get("ticket_category", "")),
+                "title": parsed.get("title") or data.get("suggested_title") or "Untitled",
+                "body": parsed.get("body") or "",
+                "category": parsed.get("category") or data.get("ticket_category") or "",
             }
         except Exception:
             logger.exception("KB article generation failed, returning fallback")
