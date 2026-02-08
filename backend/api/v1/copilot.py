@@ -1,8 +1,7 @@
 import json
 import logging
-from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,13 +9,11 @@ from agents.base import AgentMessage
 from agents.triage import TriageAgent
 from api.v1.auth import get_current_user
 from api.v1.schemas.copilot import (
-    ByAnswerTypeStats,
     Classification,
     CopilotAskRequest,
     CopilotAskResponse,
-    EvaluationResponse,
+    EvaluationStepResponse,
     ProvenanceInfo,
-    RetrievalAccuracy,
     SearchResult,
 )
 from vector_db.database import get_db
@@ -40,9 +37,7 @@ _SOURCE_TYPE_MAP: dict[str, str] = {
 
 async def _get_provenance(db: AsyncSession, article_id: str) -> ProvenanceInfo | None:
     """Fetch provenance info from kb_lineage for a KB article."""
-    result = await db.execute(
-        select(KBLineage).where(KBLineage.kb_article_id == article_id)
-    )
+    result = await db.execute(select(KBLineage).where(KBLineage.kb_article_id == article_id))
     rows = result.scalars().all()
     if not rows:
         return None
@@ -57,7 +52,11 @@ async def _get_provenance(db: AsyncSession, article_id: str) -> ProvenanceInfo |
                 created_from_ticket = row.source_id
             elif row.source_id.startswith("CONV-"):
                 created_from_conversation = row.source_id
-        elif row.relationship == "REFERENCES" and row.source_id and row.source_id.startswith("SCRIPT-"):
+        elif (
+            row.relationship == "REFERENCES"
+            and row.source_id
+            and row.source_id.startswith("SCRIPT-")
+        ):
             references_script = row.source_id
 
     if not any([created_from_ticket, created_from_conversation, references_script]):
@@ -80,9 +79,7 @@ async def copilot_ask(
     search_service = VectorSearchService(db)
     triage_agent = TriageAgent(db, embedding_service, search_service)
 
-    response = await triage_agent.run(
-        [AgentMessage(role="user", content=request.question)]
-    )
+    response = await triage_agent.run([AgentMessage(role="user", content=request.question)])
 
     payload = json.loads(response.content)
     classification_data = payload["classification"]
@@ -126,13 +123,14 @@ async def copilot_ask(
     )
 
 
-@router.get("/evaluate", response_model=EvaluationResponse)
+@router.get("/evaluate", response_model=EvaluationStepResponse)
 async def copilot_evaluate(
+    index: int = Query(..., ge=0),
     _current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> EvaluationResponse:
-    # Fetch all ground-truth questions
-    result = await db.execute(select(Question))
+) -> EvaluationStepResponse:
+    # Fetch all ground-truth questions in deterministic order
+    result = await db.execute(select(Question).order_by(Question.id))
     questions = result.scalars().all()
 
     if not questions:
@@ -141,79 +139,51 @@ async def copilot_evaluate(
             detail="No ground-truth questions found in database",
         )
 
-    embedding_service = EmbeddingService()
-    search_service = VectorSearchService(db)
-    triage_agent = TriageAgent(db, embedding_service, search_service)
-
     total = len(questions)
-    correct_classifications = 0
-    hit_at_1 = 0
-    hit_at_3 = 0
-    hit_at_5 = 0
 
-    # Per answer_type tracking
-    type_stats: dict[str, dict] = {}
+    if index >= total:
+        return EvaluationStepResponse(done=True, total=total)
 
-    for q in questions:
-        answer_type = q.answer_type or "UNKNOWN"
+    q = questions[index]
+    answer_type = q.answer_type or "UNKNOWN"
 
-        if answer_type not in type_stats:
-            type_stats[answer_type] = {
-                "count": 0,
-                "hit_at_1": 0,
-                "hit_at_3": 0,
-            }
-        type_stats[answer_type]["count"] += 1
+    try:
+        embedding_service = EmbeddingService()
+        search_service = VectorSearchService(db)
+        triage_agent = TriageAgent(db, embedding_service, search_service)
 
-        try:
-            response = await triage_agent.run(
-                [AgentMessage(role="user", content=q.question_text)]
-            )
-            payload = json.loads(response.content)
-            classified_type = payload["classification"]["answer_type"]
-            result_ids = [r.get("id", "") for r in payload.get("results", [])]
+        response = await triage_agent.run([AgentMessage(role="user", content=q.question_text)])
+        payload = json.loads(response.content)
+        classified_type = payload["classification"]["answer_type"]
+        result_ids = [r.get("id", "") for r in payload.get("results", [])]
 
-            # Classification accuracy
-            if classified_type == answer_type:
-                correct_classifications += 1
+        classification_correct = classified_type == answer_type
 
-            # Retrieval accuracy — check if target_id appears in top-k
-            if q.target_id:
-                if q.target_id in result_ids[:1]:
-                    hit_at_1 += 1
-                    hit_at_3 += 1
-                    hit_at_5 += 1
-                    type_stats[answer_type]["hit_at_1"] += 1
-                    type_stats[answer_type]["hit_at_3"] += 1
-                elif q.target_id in result_ids[:3]:
-                    hit_at_3 += 1
-                    hit_at_5 += 1
-                    type_stats[answer_type]["hit_at_3"] += 1
-                elif q.target_id in result_ids[:5]:
-                    hit_at_5 += 1
+        h1 = bool(q.target_id and q.target_id in result_ids[:1])
+        h3 = bool(q.target_id and q.target_id in result_ids[:3])
+        h5 = bool(q.target_id and q.target_id in result_ids[:5])
 
-        except Exception:
-            logger.exception("Evaluation failed for question %s", q.id)
-
-    by_answer_type = {}
-    for at, stats in type_stats.items():
-        count = stats["count"]
-        by_answer_type[at] = ByAnswerTypeStats(
-            count=count,
-            hit_at_1=stats["hit_at_1"] / count if count > 0 else 0.0,
-            hit_at_3=stats["hit_at_3"] / count if count > 0 else 0.0,
+        return EvaluationStepResponse(
+            done=False,
+            total=total,
+            index=index,
+            question_id=str(q.id),
+            answer_type=answer_type,
+            classified_type=classified_type,
+            classification_correct=classification_correct,
+            target_id=q.target_id,
+            hit_at_1=h1,
+            hit_at_3=h3,
+            hit_at_5=h5,
+            error=False,
         )
-
-    questions_with_targets = sum(1 for q in questions if q.target_id)
-
-    return EvaluationResponse(
-        total_questions=total,
-        classification_accuracy=correct_classifications / total if total > 0 else 0.0,
-        retrieval_accuracy=RetrievalAccuracy(
-            hit_at_1=hit_at_1 / questions_with_targets if questions_with_targets > 0 else 0.0,
-            hit_at_3=hit_at_3 / questions_with_targets if questions_with_targets > 0 else 0.0,
-            hit_at_5=hit_at_5 / questions_with_targets if questions_with_targets > 0 else 0.0,
-        ),
-        by_answer_type=by_answer_type,
-        evaluated_at=datetime.now(UTC).isoformat(),
-    )
+    except Exception:
+        logger.exception("Evaluation failed for question %s", q.id)
+        return EvaluationStepResponse(
+            done=False,
+            total=total,
+            index=index,
+            question_id=str(q.id),
+            answer_type=answer_type,
+            error=True,
+        )

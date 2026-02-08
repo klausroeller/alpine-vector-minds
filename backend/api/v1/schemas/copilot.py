@@ -49,6 +49,21 @@ class RetrievalAccuracy(BaseModel):
     hit_at_5: float
 
 
+class EvaluationStepResponse(BaseModel):
+    done: bool
+    total: int
+    index: int | None = None
+    question_id: str | None = None
+    answer_type: str | None = None
+    classified_type: str | None = None
+    classification_correct: bool | None = None
+    target_id: str | None = None
+    hit_at_1: bool | None = None
+    hit_at_3: bool | None = None
+    hit_at_5: bool | None = None
+    error: bool = False
+
+
 class EvaluationResponse(BaseModel):
     total_questions: int
     classification_accuracy: float

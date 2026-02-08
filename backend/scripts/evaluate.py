@@ -17,7 +17,7 @@ PROD_BASE_URL = "https://alpine-vector-minds.de"
 DEV_EMAIL = "dev@example.com"
 DEV_PASSWORD = "dev"
 
-EVALUATE_TIMEOUT_SECONDS = 1800  # 30 minutes — 1,000 LLM calls
+PER_QUESTION_TIMEOUT_SECONDS = 120
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,6 +31,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", help="Override the base URL")
     parser.add_argument("--email", help="Login email")
     parser.add_argument("--password", help="Login password")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=100,
+        help="Maximum number of questions to evaluate (default: 100)",
+    )
     return parser.parse_args()
 
 
@@ -66,17 +72,109 @@ def authenticate(client: httpx.Client, base_url: str, email: str, password: str)
     return resp.json()["access_token"]
 
 
-def run_evaluation(client: httpx.Client, base_url: str, token: str) -> dict:
-    """Call the evaluation endpoint and return the JSON response."""
-    resp = client.get(
-        f"{base_url}/api/v1/copilot/evaluate",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=EVALUATE_TIMEOUT_SECONDS,
-    )
-    if resp.status_code != 200:
-        print(f"ERROR: Evaluation failed ({resp.status_code}): {resp.text}")
-        sys.exit(1)
-    return resp.json()
+def print_progress(index: int, total: int) -> None:
+    """Print an in-place progress bar."""
+    bar_width = 30
+    filled = int(bar_width * index / total) if total > 0 else 0
+    bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
+    pct = index / total * 100 if total > 0 else 0
+    sys.stdout.write(f"\rEvaluating: [{bar}] {index}/{total} ({pct:.1f}%)")
+    sys.stdout.flush()
+
+
+def run_evaluation(client: httpx.Client, base_url: str, token: str, limit: int) -> list[dict]:
+    """Call the per-question evaluation endpoint in a loop, returning all step results."""
+    headers = {"Authorization": f"Bearer {token}"}
+    results = []
+    index = 0
+
+    while index < limit:
+        resp = client.get(
+            f"{base_url}/api/v1/copilot/evaluate",
+            params={"index": index},
+            headers=headers,
+            timeout=PER_QUESTION_TIMEOUT_SECONDS,
+        )
+        if resp.status_code != 200:
+            print(f"\nERROR: Evaluation failed ({resp.status_code}): {resp.text}")
+            sys.exit(1)
+
+        step = resp.json()
+
+        if step.get("done"):
+            print_progress(step["total"], step["total"])
+            break
+
+        results.append(step)
+        print_progress(index + 1, min(step["total"], limit))
+        index += 1
+
+    print()  # newline after progress bar
+    return results
+
+
+def aggregate_results(steps: list[dict]) -> dict:
+    """Aggregate per-question results into the final evaluation report."""
+    total = len(steps)
+    correct_classifications = 0
+    hit_at_1 = 0
+    hit_at_3 = 0
+    hit_at_5 = 0
+    questions_with_targets = 0
+    errors = 0
+
+    type_stats: dict[str, dict] = {}
+
+    for s in steps:
+        if s.get("error"):
+            errors += 1
+            continue
+
+        answer_type = s.get("answer_type") or "UNKNOWN"
+        if answer_type not in type_stats:
+            type_stats[answer_type] = {"count": 0, "hit_at_1": 0, "hit_at_3": 0}
+        type_stats[answer_type]["count"] += 1
+
+        if s.get("classification_correct"):
+            correct_classifications += 1
+
+        if s.get("target_id"):
+            questions_with_targets += 1
+            if s.get("hit_at_1"):
+                hit_at_1 += 1
+                hit_at_3 += 1
+                hit_at_5 += 1
+                type_stats[answer_type]["hit_at_1"] += 1
+                type_stats[answer_type]["hit_at_3"] += 1
+            elif s.get("hit_at_3"):
+                hit_at_3 += 1
+                hit_at_5 += 1
+                type_stats[answer_type]["hit_at_3"] += 1
+            elif s.get("hit_at_5"):
+                hit_at_5 += 1
+
+    non_error = total - errors
+    by_answer_type = {}
+    for at, stats in type_stats.items():
+        count = stats["count"]
+        by_answer_type[at] = {
+            "count": count,
+            "hit_at_1": stats["hit_at_1"] / count if count > 0 else 0.0,
+            "hit_at_3": stats["hit_at_3"] / count if count > 0 else 0.0,
+        }
+
+    return {
+        "total_questions": total,
+        "classification_accuracy": correct_classifications / non_error if non_error > 0 else 0.0,
+        "retrieval_accuracy": {
+            "hit_at_1": hit_at_1 / questions_with_targets if questions_with_targets > 0 else 0.0,
+            "hit_at_3": hit_at_3 / questions_with_targets if questions_with_targets > 0 else 0.0,
+            "hit_at_5": hit_at_5 / questions_with_targets if questions_with_targets > 0 else 0.0,
+        },
+        "by_answer_type": by_answer_type,
+        "errors": errors,
+        "evaluated_at": datetime.now(UTC).isoformat(),
+    }
 
 
 def pct(value: float) -> str:
@@ -119,14 +217,19 @@ def main() -> None:
     base_url = resolve_base_url(args)
     email, password = resolve_credentials(args)
 
-    print(f"Evaluating {args.env} at {base_url}")
+    print(f"Evaluating {args.env} at {base_url} (limit: {args.limit})")
 
     with httpx.Client() as client:
         print("Authenticating...")
         token = authenticate(client, base_url, email, password)
 
-        print("Running evaluation (this may take a while)...")
-        data = run_evaluation(client, base_url, token)
+        steps = run_evaluation(client, base_url, token, args.limit)
+
+    if not steps:
+        print("No questions evaluated.")
+        return
+
+    data = aggregate_results(steps)
 
     # Save reports
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
