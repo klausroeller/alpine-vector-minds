@@ -33,6 +33,7 @@ rsync -avz --delete \
   --exclude 'backups' \
   --exclude '.terraform' \
   --exclude '*.tfstate*' \
+  --exclude 'submission' \
   ./ "$REMOTE_USER@$DEPLOY_HOST:$REMOTE_DIR/"
 
 # Copy production env
