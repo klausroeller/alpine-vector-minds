@@ -255,6 +255,7 @@ async def detect_gap(
         embedding=embedding,
     )
     db.add(kb_article)
+    await db.flush()
 
     # Create lineage records
     lineage_ticket = KBLineage(
