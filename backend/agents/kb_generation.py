@@ -73,7 +73,6 @@ class KBGenerationAgent(BaseAgent):
     async def _generate_article(self, data: dict[str, Any]) -> dict[str, Any]:
         """Generate the KB article via LLM."""
         user_message = self._build_prompt(data)
-
         try:
             completion = await self.llm_client.chat.completions.create(
                 model=self.chat_model,
@@ -94,14 +93,24 @@ class KBGenerationAgent(BaseAgent):
             raw = choice.message.content or "{}"
             raw = strip_markdown_fences(raw)
             parsed = json.loads(raw)
-            return {
-                "title": parsed.get("title") or data.get("suggested_title") or "Untitled",
-                "body": parsed.get("body") or "",
-                "category": parsed.get("category") or data.get("ticket_category") or "",
-            }
         except Exception:
             logger.exception("KB article generation failed, returning fallback")
             return self._fallback_article(data)
+
+        title = parsed.get("title")
+        body = parsed.get("body")
+
+        if not title and not body:
+            raise ValueError(
+                f"LLM returned empty title and body for KB generation "
+                f"(ticket {data.get('ticket_id', 'unknown')})"
+            )
+
+        return {
+            "title": title or data.get("suggested_title") or "Untitled",
+            "body": body or "",
+            "category": parsed.get("category") or data.get("ticket_category") or "",
+        }
 
     def _build_prompt(self, data: dict[str, Any]) -> str:
         """Build the user prompt from ticket data."""

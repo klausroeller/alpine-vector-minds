@@ -14,6 +14,7 @@ from api.core.constants import (
     DEFAULT_PAGE,
     DEFAULT_PAGE_SIZE,
     EMBEDDING_TEXT_SEPARATOR,
+    MAX_KB_TRANSCRIPT_CHARS,
     MAX_PAGE_SIZE,
 )
 from api.v1.auth import get_current_user
@@ -226,7 +227,10 @@ async def detect_gap(
     }
 
     if conversation:
-        gen_input_data["conversation_transcript"] = conversation.transcript or ""
+        transcript = conversation.transcript or ""
+        if len(transcript) > MAX_KB_TRANSCRIPT_CHARS:
+            transcript = transcript[:MAX_KB_TRANSCRIPT_CHARS] + "\n[... transcript truncated]"
+        gen_input_data["conversation_transcript"] = transcript
 
     if script:
         gen_input_data["script_title"] = script.title

@@ -80,7 +80,7 @@ async def _generate_ai_answer(
                 {"role": "system", "content": _ANSWER_SYSTEM_PROMPT},
                 {"role": "user", "content": f"Question: {question}\n\n{context}"},
             ],
-            max_tokens=300,
+            max_completion_tokens=300,
         )
         text = completion.choices[0].message.content or ""
         return AIAnswer(text=text.strip(), source_ids=source_ids)

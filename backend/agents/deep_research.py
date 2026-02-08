@@ -165,7 +165,7 @@ class DeepResearchAgent(BaseAgent):
                     {"role": "system", "content": ROUTING_SYSTEM_PROMPT},
                     {"role": "user", "content": question},
                 ],
-                max_tokens=10,
+                max_completion_tokens=10,
             )
             raw = (completion.choices[0].message.content or "").strip().upper()
             if raw in ("SIMPLE", "RESEARCH"):
@@ -183,7 +183,7 @@ class DeepResearchAgent(BaseAgent):
                     {"role": "system", "content": DECOMPOSITION_SYSTEM_PROMPT},
                     {"role": "user", "content": question},
                 ],
-                max_tokens=500,
+                max_completion_tokens=500,
             )
             raw = strip_markdown_fences(completion.choices[0].message.content or "[]")
             parsed = json.loads(raw)
@@ -308,7 +308,7 @@ class DeepResearchAgent(BaseAgent):
                     {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
                 ],
-                max_tokens=2000,
+                max_completion_tokens=2000,
             )
             raw = strip_markdown_fences(completion.choices[0].message.content or "{}")
             report = json.loads(raw)

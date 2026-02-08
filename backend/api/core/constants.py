@@ -25,5 +25,8 @@ DEEP_RESEARCH_MAX_SUB_QUERIES = 4  # Max decomposition sub-queries
 DEEP_RESEARCH_RESULTS_PER_QUERY = 5  # Top-k results per sub-query
 DEEP_RESEARCH_MAX_CONTEXT_ITEMS = 15  # Max merged results for synthesis
 
+# KB generation
+MAX_KB_TRANSCRIPT_CHARS = 8000  # Max conversation transcript chars for KB article generation
+
 # Embedding config
 EMBEDDING_TEXT_SEPARATOR = "\n"  # Separator for title+body concatenation

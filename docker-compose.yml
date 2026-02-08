@@ -26,6 +26,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
       DEFAULT_USER_EMAIL: ${DEFAULT_USER_EMAIL:-}
       DEFAULT_USER_PASSWORD: ${DEFAULT_USER_PASSWORD:-}
       DEFAULT_USER_NAME: ${DEFAULT_USER_NAME:-}

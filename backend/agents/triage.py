@@ -159,7 +159,7 @@ class TriageAgent(BaseAgent):
             completion = await self.llm_client.chat.completions.create(
                 model=self.triage_model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+                max_completion_tokens=500,
             )
             raw = strip_markdown_fences(completion.choices[0].message.content or "[]")
             ranked_ids = json.loads(raw)
@@ -198,7 +198,7 @@ class TriageAgent(BaseAgent):
                     {"role": "system", "content": CLASSIFICATION_SYSTEM_PROMPT},
                     {"role": "user", "content": question},
                 ],
-                max_tokens=300,
+                max_completion_tokens=300,
             )
             raw = completion.choices[0].message.content or "{}"
             raw = strip_markdown_fences(raw)
