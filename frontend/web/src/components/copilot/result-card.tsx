@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp, ScrollText, BookOpen, Ticket } from 'lucide-react';
+import { ChevronDown, ChevronUp, ScrollText, BookOpen, Ticket, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ProvenanceChain } from '@/components/knowledge/provenance-chain';
@@ -13,6 +13,10 @@ interface ResultCardProps {
   result: SearchResult;
   index: number;
   visible: boolean;
+  questionText?: string;
+  classification?: string;
+  feedbackGiven?: 'up' | 'down' | null;
+  onFeedback?: (resultId: string, rank: number, helpful: boolean) => void;
 }
 
 const SOURCE_CONFIG: Record<string, {
@@ -37,7 +41,7 @@ const SOURCE_CONFIG: Record<string, {
   },
 };
 
-export function ResultCard({ result, index, visible }: ResultCardProps) {
+export function ResultCard({ result, index, visible, feedbackGiven, onFeedback }: ResultCardProps) {
   const [expanded, setExpanded] = useState(false);
   const source = SOURCE_CONFIG[result.source_type] ?? SOURCE_CONFIG.kb_article;
   const Icon = source.icon;
@@ -148,6 +152,41 @@ export function ResultCard({ result, index, visible }: ResultCardProps) {
                     {ph}
                   </Badge>
                 ))}
+              </div>
+            )}
+
+            {/* Feedback buttons */}
+            {onFeedback && (
+              <div className="mt-3 flex items-center gap-2 border-t border-white/[0.04] pt-3">
+                <span className="text-xs text-slate-600">Helpful?</span>
+                <button
+                  onClick={() => onFeedback(result.source_id, result.rank, true)}
+                  disabled={feedbackGiven !== undefined && feedbackGiven !== null}
+                  className={cn(
+                    'rounded-md p-1.5 transition-colors',
+                    feedbackGiven === 'up'
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : feedbackGiven
+                        ? 'cursor-not-allowed text-slate-700'
+                        : 'text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400'
+                  )}
+                >
+                  <ThumbsUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => onFeedback(result.source_id, result.rank, false)}
+                  disabled={feedbackGiven !== undefined && feedbackGiven !== null}
+                  className={cn(
+                    'rounded-md p-1.5 transition-colors',
+                    feedbackGiven === 'down'
+                      ? 'bg-red-500/20 text-red-400'
+                      : feedbackGiven
+                        ? 'cursor-not-allowed text-slate-700'
+                        : 'text-slate-500 hover:bg-red-500/10 hover:text-red-400'
+                  )}
+                >
+                  <ThumbsDown className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
           </div>

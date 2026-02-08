@@ -16,7 +16,20 @@ function CopilotContent() {
   const [response, setResponse] = useState<CopilotResponse | null>(null);
   const [resultsVisible, setResultsVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
   const autoSearchTriggered = useRef(false);
+
+  const handleFeedback = useCallback((resultId: string, rank: number, helpful: boolean) => {
+    setFeedback((prev) => ({ ...prev, [resultId]: helpful ? 'up' : 'down' }));
+    // Fire-and-forget
+    api.submitFeedback({
+      question_text: query,
+      classification: response?.classification.answer_type,
+      result_id: resultId,
+      result_rank: rank,
+      helpful,
+    }).catch(() => {});
+  }, [query, response]);
 
   const handleSubmit = useCallback(async () => {
     if (!query.trim() || loading) return;
@@ -24,6 +37,7 @@ function CopilotContent() {
     setResponse(null);
     setResultsVisible(false);
     setError(null);
+    setFeedback({});
 
     try {
       const data = await api.copilotAsk(query.trim());
@@ -105,6 +119,10 @@ function CopilotContent() {
                     result={result}
                     index={i}
                     visible={resultsVisible}
+                    questionText={query}
+                    classification={response.classification.answer_type}
+                    feedbackGiven={feedback[result.source_id] ?? null}
+                    onFeedback={handleFeedback}
                   />
                 ))}
               </div>

@@ -1,4 +1,4 @@
-.PHONY: install dev dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup migrate-ticket-embeddings import-data generate-embeddings create-vector-indexes create-fulltext-indexes seed seed-production evaluate
+.PHONY: install dev dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup migrate-ticket-embeddings migrate-qa-columns import-data generate-embeddings create-vector-indexes create-fulltext-indexes seed seed-production evaluate
 
 # ─── Development ────────────────────────────────────────────
 
@@ -30,6 +30,10 @@ test:
 migrate-ticket-embeddings:
 	docker exec alpine-api uv run python -m scripts.migrate_ticket_embeddings
 
+# Add QA scoring columns to conversations table (idempotent)
+migrate-qa-columns:
+	docker exec alpine-api uv run python -m scripts.migrate_qa_columns
+
 # Import Excel data into the database
 import-data:
 	docker exec alpine-api uv run python -m scripts.import_data
@@ -47,7 +51,7 @@ create-fulltext-indexes:
 	docker exec alpine-api uv run python -m scripts.create_fulltext_indexes
 
 # Run full data pipeline: import, embed, index (vector + fulltext)
-seed: import-data migrate-ticket-embeddings generate-embeddings create-vector-indexes create-fulltext-indexes
+seed: import-data migrate-ticket-embeddings migrate-qa-columns generate-embeddings create-vector-indexes create-fulltext-indexes
 
 # Run full data pipeline on the production server
 seed-production:

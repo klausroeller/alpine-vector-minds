@@ -8,6 +8,7 @@ import {
   MessageSquareText,
   BookOpen,
   GraduationCap,
+  ShieldCheck,
   LogOut,
   Menu,
   ChevronDown,
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { href: '/copilot', label: 'Copilot', icon: MessageSquareText },
   { href: '/knowledge', label: 'Knowledge Base', icon: BookOpen },
   { href: '/learning', label: 'Learning Feed', icon: GraduationCap },
+  { href: '/qa', label: 'QA Scores', icon: ShieldCheck },
 ];
 
 function SidebarContent({ pathname }: { pathname: string }) {

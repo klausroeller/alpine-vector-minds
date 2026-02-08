@@ -40,9 +40,10 @@ make seed
 **What `make seed` does (in order):**
 1. `make import-data` — Imports all data from `data/SupportMind__Final_Data.xlsx` into the database (3,207 KB articles, 714 scripts, 400 tickets, 1,000 questions, etc.)
 2. `make migrate-ticket-embeddings` — Adds embedding column to tickets table
-3. `make generate-embeddings` — Generates OpenAI embeddings for KB articles, scripts, tickets, and questions (~$0.06 cost)
-4. `make create-vector-indexes` — Creates IVFFlat indexes on embedding columns for fast similarity search
-5. `make create-fulltext-indexes` — Creates tsvector columns and GIN indexes for full-text search
+3. `make migrate-qa-columns` — Adds QA scoring columns to conversations table
+4. `make generate-embeddings` — Generates OpenAI embeddings for KB articles, scripts, tickets, and questions (~$0.06 cost)
+5. `make create-vector-indexes` — Creates IVFFlat indexes on embedding columns for fast similarity search
+6. `make create-fulltext-indexes` — Creates tsvector columns and GIN indexes for full-text search
 
 > **Important**: `make seed` runs on the host via `uv run` and connects to the Dockerized DB at `localhost:5432`. The DB must be up (`make dev`) before running `make seed`.
 
@@ -60,7 +61,7 @@ Access the API docs at http://localhost:8000/docs once running.
 │   │   ├── models/           # SQLAlchemy models (9 tables)
 │   │   ├── database.py       # Async engine + session
 │   │   └── embeddings.py     # OpenAI embedding service
-│   ├── agents/               # AI agent services (triage, gap detection, KB generation)
+│   ├── agents/               # AI agent services (triage, gap detection, KB generation, QA scoring)
 │   ├── scripts/              # Data pipeline CLI scripts
 │   │   ├── import_data.py    # Excel → database import
 │   │   ├── generate_embeddings.py  # Batch embedding generation
@@ -82,17 +83,19 @@ Access the API docs at http://localhost:8000/docs once running.
 
 ## Database Schema
 
-9 tables, all with proper constraints and indexes:
+11 tables, all with proper constraints and indexes:
 
 | Table | Rows (seed) | Embeddings | Description |
 |-------|-------------|------------|-------------|
 | `knowledge_articles` | 3,207 | 1536-dim | KB articles (seed + auto-generated) |
 | `scripts` | 714 | 1536-dim | SQL fix scripts with placeholders |
 | `tickets` | 400 | 1536-dim | Support tickets with resolution |
-| `conversations` | 400 | — | Chat/phone transcripts linked to tickets |
+| `conversations` | 400 | — | Chat/phone transcripts linked to tickets (+ QA scores) |
 | `questions` | 1,000 | 1536-dim | Ground-truth Q&A for evaluation |
 | `kb_lineage` | 483 | — | Provenance chain for auto-generated articles |
 | `learning_events` | 161 | — | Knowledge gap detection + review workflow |
+| `evaluation_runs` | — | — | Stored copilot evaluation results (hit@1/5/10) |
+| `copilot_feedback` | — | — | User thumbs-up/down feedback on search results |
 | `placeholders` | 25 | — | Script placeholder reference data |
 | `users` | 1 | — | Auth users (dev user auto-seeded) |
 
@@ -104,6 +107,7 @@ make dev                     # Start all services in Docker
 make seed                    # Full pipeline: import, migrate, embed, index (vector + FTS)
 make import-data             # Import Excel data only
 make migrate-ticket-embeddings  # Add embedding column to tickets table
+make migrate-qa-columns      # Add QA scoring columns to conversations table
 make generate-embeddings     # Generate embeddings (KB, scripts, tickets, questions)
 make create-vector-indexes   # Create IVFFlat indexes only
 make create-fulltext-indexes # Create tsvector columns + GIN indexes
@@ -129,7 +133,12 @@ Base URL: `http://localhost:8000`
 | `/api/v1/learning/review/{id}` | POST | Approve/reject learning event (auth required) |
 | `/api/v1/copilot/ask` | POST | Copilot triage + vector search (auth required) |
 | `/api/v1/copilot/evaluate` | GET | Run ground-truth evaluation (auth required) |
+| `/api/v1/copilot/feedback` | POST | Submit feedback on search result (auth required) |
 | `/api/v1/learning/detect-gap` | POST | Detect knowledge gap from ticket (auth required) |
+| `/api/v1/qa/score/{id}` | POST | Score a conversation with QA rubric (auth required) |
+| `/api/v1/qa/scores` | GET | List scored conversations with filters (auth required) |
+| `/api/v1/evaluation/results` | POST | Store evaluation run results (auth required) |
+| `/api/v1/evaluation/latest` | GET | Get latest evaluation run (auth required) |
 
 API docs: `/docs` (Swagger) or `/redoc`
 
@@ -137,11 +146,12 @@ API docs: `/docs` (Swagger) or `/redoc`
 
 | Route | Description |
 |-------|-------------|
-| `/dashboard` | Metrics overview with charts (KB categories, ticket priorities, root causes) |
-| `/copilot` | AI-powered search across KB articles, scripts, and tickets |
+| `/dashboard` | Metrics overview with charts, QA quality, system accuracy, feedback |
+| `/copilot` | AI-powered search with thumbs-up/down feedback buttons |
 | `/knowledge` | Knowledge base list with search, filters, pagination |
 | `/knowledge/[id]` | Article detail with provenance chain |
 | `/learning` | Learning feed with status tabs and approve/reject workflow |
+| `/qa` | QA scores — conversation quality assessment with 6-category rubric |
 
 ## Environment Variables
 

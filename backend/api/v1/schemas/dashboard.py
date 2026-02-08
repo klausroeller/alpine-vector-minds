@@ -31,8 +31,32 @@ class ScriptMetrics(BaseModel):
     by_category: list[CategoryCount]
 
 
+class QAMetrics(BaseModel):
+    total_scored: int
+    average_score: float
+    red_flag_count: int
+
+
+class EvaluationMetrics(BaseModel):
+    classification_accuracy: float
+    hit_at_1: float
+    hit_at_5: float
+    hit_at_10: float
+    total_questions: int
+    evaluated_at: str
+
+
+class FeedbackMetrics(BaseModel):
+    total_feedback: int
+    helpful_count: int
+    helpful_rate: float
+
+
 class DashboardMetricsResponse(BaseModel):
     knowledge_base: KnowledgeBaseMetrics
     learning: LearningMetrics
     tickets: TicketMetrics
     scripts: ScriptMetrics
+    qa: QAMetrics | None = None
+    evaluation: EvaluationMetrics | None = None
+    feedback: FeedbackMetrics | None = None

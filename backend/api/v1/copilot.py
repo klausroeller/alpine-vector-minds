@@ -2,6 +2,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,7 @@ from api.v1.schemas.copilot import (
 )
 from vector_db.database import get_db
 from vector_db.embeddings import EmbeddingService
+from vector_db.models.copilot_feedback import CopilotFeedback
 from vector_db.models.kb_lineage import KBLineage
 from vector_db.models.question import Question
 from vector_db.models.user import User
@@ -188,3 +190,36 @@ async def copilot_evaluate(
             difficulty=q.difficulty,
             error=True,
         )
+
+
+class FeedbackRequest(BaseModel):
+    question_text: str
+    classification: str | None = None
+    result_id: str | None = None
+    result_rank: int | None = None
+    helpful: bool
+
+
+class FeedbackResponse(BaseModel):
+    id: str
+    status: str
+
+
+@router.post("/feedback", response_model=FeedbackResponse)
+async def submit_feedback(
+    body: FeedbackRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> FeedbackResponse:
+    """Store feedback on a copilot search result."""
+    feedback = CopilotFeedback(
+        question_text=body.question_text,
+        classification=body.classification,
+        result_id=body.result_id,
+        result_rank=body.result_rank,
+        helpful=body.helpful,
+        user_id=current_user.id,
+    )
+    db.add(feedback)
+    await db.flush()
+    return FeedbackResponse(id=feedback.id, status="stored")

@@ -169,6 +169,51 @@ export interface DashboardMetrics {
     total: number;
     by_category: CategoryCount[];
   };
+  qa?: {
+    total_scored: number;
+    average_score: number;
+    red_flag_count: number;
+  };
+  evaluation?: {
+    classification_accuracy: number;
+    hit_at_1: number;
+    hit_at_5: number;
+    hit_at_10: number;
+    total_questions: number;
+    evaluated_at: string;
+  };
+  feedback?: {
+    total_feedback: number;
+    helpful_count: number;
+    helpful_rate: number;
+  };
+}
+
+// --- QA Scores ---
+
+export interface CategoryScore {
+  score: number;
+  weight: number;
+  feedback: string;
+}
+
+export interface QAScoreResponse {
+  conversation_id: string;
+  overall_score: number | null;
+  categories: Record<string, CategoryScore>;
+  red_flags: string[];
+  summary: string;
+  scored_at: string | null;
+}
+
+export interface QAScoreListItem {
+  conversation_id: string;
+  ticket_id: string;
+  agent_name: string | null;
+  channel: string | null;
+  overall_score: number | null;
+  red_flags: string[];
+  scored_at: string | null;
 }
 
 // --- Detect Gap ---
@@ -310,6 +355,42 @@ export const api = {
     return request<CopilotResponse>('/api/v1/copilot/ask', {
       method: 'POST',
       body: JSON.stringify({ question }),
+    });
+  },
+
+  // QA Scoring
+  scoreConversation: async (conversationId: string): Promise<QAScoreResponse> => {
+    return request<QAScoreResponse>(`/api/v1/qa/score/${conversationId}`, {
+      method: 'POST',
+    });
+  },
+
+  listQAScores: async (params: {
+    min_score?: number;
+    has_red_flags?: boolean;
+    page?: number;
+    page_size?: number;
+  } = {}): Promise<PaginatedResponse<QAScoreListItem>> => {
+    const searchParams = new URLSearchParams();
+    if (params.min_score !== undefined) searchParams.set('min_score', String(params.min_score));
+    if (params.has_red_flags !== undefined) searchParams.set('has_red_flags', String(params.has_red_flags));
+    if (params.page) searchParams.set('page', String(params.page));
+    if (params.page_size) searchParams.set('page_size', String(params.page_size));
+    const qs = searchParams.toString();
+    return request<PaginatedResponse<QAScoreListItem>>(`/api/v1/qa/scores${qs ? `?${qs}` : ''}`);
+  },
+
+  // Copilot Feedback
+  submitFeedback: async (params: {
+    question_text: string;
+    classification?: string;
+    result_id?: string;
+    result_rank?: number;
+    helpful: boolean;
+  }): Promise<{ id: string; status: string }> => {
+    return request<{ id: string; status: string }>('/api/v1/copilot/feedback', {
+      method: 'POST',
+      body: JSON.stringify(params),
     });
   },
 };
