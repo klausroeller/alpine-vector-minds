@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,11 +8,13 @@ from api.v1.auth import get_current_user
 from api.v1.schemas.dashboard import (
     CategoryCount,
     DashboardMetricsResponse,
+    DifficultyMetrics,
     EvaluationMetrics,
     FeedbackMetrics,
     KnowledgeBaseMetrics,
     LearningMetrics,
     QAMetrics,
+    QAMonthlyScore,
     ScriptMetrics,
     TicketMetrics,
 )
@@ -131,10 +135,30 @@ async def get_dashboard_metrics(
                 )
             )
         ).scalar() or 0
+        # Monthly average scores grouped by conversation_end month
+        monthly_rows = await db.execute(
+            select(
+                func.to_char(Conversation.conversation_end, "YYYY-MM").label("month"),
+                func.avg(Conversation.qa_score).label("avg_score"),
+                func.count().label("cnt"),
+            )
+            .where(
+                Conversation.qa_scored_at.isnot(None),
+                Conversation.conversation_end.isnot(None),
+            )
+            .group_by(func.to_char(Conversation.conversation_end, "YYYY-MM"))
+            .order_by(func.to_char(Conversation.conversation_end, "YYYY-MM"))
+        )
+        monthly_scores = [
+            QAMonthlyScore(month=row[0], avg_score=round(float(row[1]), 1), count=row[2])
+            for row in monthly_rows
+        ]
+
         qa_metrics = QAMetrics(
             total_scored=qa_total,
             average_score=round(float(qa_avg), 1),
             red_flag_count=qa_red_flag_count,
+            monthly_scores=monthly_scores,
         )
 
     # --- Evaluation Metrics ---
@@ -143,6 +167,13 @@ async def get_dashboard_metrics(
         await db.execute(select(EvaluationRun).order_by(EvaluationRun.evaluated_at.desc()).limit(1))
     ).scalar_one_or_none()
     if latest_eval:
+        by_difficulty = None
+        if latest_eval.by_difficulty_json:
+            try:
+                raw = json.loads(latest_eval.by_difficulty_json)
+                by_difficulty = {k: DifficultyMetrics(**v) for k, v in raw.items()}
+            except (json.JSONDecodeError, TypeError):
+                pass
         eval_metrics = EvaluationMetrics(
             classification_accuracy=latest_eval.classification_accuracy,
             hit_at_1=latest_eval.hit_at_1,
@@ -150,6 +181,7 @@ async def get_dashboard_metrics(
             hit_at_10=latest_eval.hit_at_10,
             total_questions=latest_eval.total_questions,
             evaluated_at=latest_eval.evaluated_at.isoformat() if latest_eval.evaluated_at else "",
+            by_difficulty=by_difficulty,
         )
 
     # --- Feedback Metrics ---

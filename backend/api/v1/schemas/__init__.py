@@ -22,14 +22,13 @@ from api.v1.schemas.learning import (
     ReviewResponse,
 )
 from api.v1.schemas.qa import (
-    CategoryScore,
     PaginatedQAResponse,
+    QADetailResponse,
     QAScoreListItem,
-    QAScoreResponse,
+    ScoreAllResponse,
 )
 
 __all__ = [
-    "CategoryScore",
     "Classification",
     "CopilotAskRequest",
     "CopilotAskResponse",
@@ -45,9 +44,10 @@ __all__ = [
     "PaginatedLearningResponse",
     "PaginatedQAResponse",
     "ProvenanceInfo",
+    "QADetailResponse",
     "QAScoreListItem",
-    "QAScoreResponse",
     "ReviewRequest",
     "ReviewResponse",
+    "ScoreAllResponse",
     "SearchResult",
 ]

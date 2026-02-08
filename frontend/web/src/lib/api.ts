@@ -173,6 +173,7 @@ export interface DashboardMetrics {
     total_scored: number;
     average_score: number;
     red_flag_count: number;
+    monthly_scores: { month: string; avg_score: number; count: number }[];
   };
   evaluation?: {
     classification_accuracy: number;
@@ -181,6 +182,12 @@ export interface DashboardMetrics {
     hit_at_10: number;
     total_questions: number;
     evaluated_at: string;
+    by_difficulty?: Record<string, {
+      count: number;
+      classification_correct: number;
+      hit_at_1: number;
+      hit_at_5: number;
+    }>;
   };
   feedback?: {
     total_feedback: number;
@@ -191,18 +198,12 @@ export interface DashboardMetrics {
 
 // --- QA Scores ---
 
-export interface CategoryScore {
-  score: number;
-  weight: number;
-  feedback: string;
-}
-
-export interface QAScoreResponse {
+export interface QADetailResponse {
   conversation_id: string;
   overall_score: number | null;
-  categories: Record<string, CategoryScore>;
+  scores_json: Record<string, unknown> | null;
   red_flags: string[];
-  summary: string;
+  transcript: string | null;
   scored_at: string | null;
 }
 
@@ -214,6 +215,12 @@ export interface QAScoreListItem {
   overall_score: number | null;
   red_flags: string[];
   scored_at: string | null;
+}
+
+export interface ScoreAllResponse {
+  scored: number;
+  errors: number;
+  remaining: number;
 }
 
 // --- Detect Gap ---
@@ -410,14 +417,22 @@ export const api = {
   },
 
   // QA Scoring
-  scoreConversation: async (conversationId: string): Promise<QAScoreResponse> => {
-    return request<QAScoreResponse>(`/api/v1/qa/score/${conversationId}`, {
+  scoreConversation: async (conversationId: string): Promise<QADetailResponse> => {
+    return request<QADetailResponse>(`/api/v1/qa/score/${conversationId}`, {
       method: 'POST',
     });
   },
 
-  getQADetail: async (conversationId: string): Promise<QAScoreResponse> => {
-    return request<QAScoreResponse>(`/api/v1/qa/detail/${conversationId}`);
+  scoreAll: async (limit = 50): Promise<ScoreAllResponse> => {
+    const searchParams = new URLSearchParams();
+    searchParams.set('limit', String(limit));
+    return request<ScoreAllResponse>(`/api/v1/qa/score-all?${searchParams.toString()}`, {
+      method: 'POST',
+    });
+  },
+
+  getQADetail: async (conversationId: string): Promise<QADetailResponse> => {
+    return request<QADetailResponse>(`/api/v1/qa/detail/${conversationId}`);
   },
 
   listConversations: async (params: {

@@ -31,10 +31,24 @@ class ScriptMetrics(BaseModel):
     by_category: list[CategoryCount]
 
 
+class QAMonthlyScore(BaseModel):
+    month: str  # "YYYY-MM"
+    avg_score: float
+    count: int
+
+
 class QAMetrics(BaseModel):
     total_scored: int
     average_score: float
     red_flag_count: int
+    monthly_scores: list[QAMonthlyScore] = []
+
+
+class DifficultyMetrics(BaseModel):
+    count: int
+    classification_correct: float
+    hit_at_1: float
+    hit_at_5: float
 
 
 class EvaluationMetrics(BaseModel):
@@ -44,6 +58,7 @@ class EvaluationMetrics(BaseModel):
     hit_at_10: float
     total_questions: int
     evaluated_at: str
+    by_difficulty: dict[str, DifficultyMetrics] | None = None
 
 
 class FeedbackMetrics(BaseModel):

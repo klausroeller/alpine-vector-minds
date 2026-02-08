@@ -18,6 +18,15 @@ class QAScoreResponse(BaseModel):
     scored_at: datetime | None
 
 
+class QADetailResponse(BaseModel):
+    conversation_id: str
+    overall_score: float | None
+    scores_json: dict | None
+    red_flags: list[str]
+    transcript: str | None
+    scored_at: datetime | None
+
+
 class QAScoreListItem(BaseModel):
     conversation_id: str
     ticket_id: str
@@ -33,3 +42,9 @@ class PaginatedQAResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ScoreAllResponse(BaseModel):
+    scored: int
+    errors: int
+    remaining: int

@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, GraduationCap, Ticket, ScrollText, ShieldCheck, Target, AlertTriangle, ThumbsUp, MessageSquare } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from 'recharts';
 import { AppLayout } from '@/components/layout/app-layout';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { CategoryBarChart } from '@/components/dashboard/category-bar-chart';
@@ -106,6 +115,70 @@ export default function DashboardPage() {
                 loading={loading}
               />
             </div>
+
+            {/* QA Score Timeline */}
+            {metrics.qa.monthly_scores && metrics.qa.monthly_scores.length > 0 && (
+              <div className="mt-4 rounded-xl border border-white/[0.06] bg-[#0a1628]/80 p-6">
+                <h3 className="mb-4 text-sm font-semibold text-slate-300">Avg. QA Score Over Time</h3>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={metrics.qa.monthly_scores.map((d) => ({
+                        month: d.month,
+                        score: d.avg_score,
+                        count: d.count,
+                      }))}
+                      margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                    >
+                      <defs>
+                        <linearGradient id="qaScoreGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                      <XAxis
+                        dataKey="month"
+                        tick={{ fill: '#64748b', fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                      />
+                      <YAxis
+                        domain={[0, 100]}
+                        tick={{ fill: '#64748b', fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={false}
+                        width={35}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#0f1d32',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                        }}
+                        labelStyle={{ color: '#94a3b8' }}
+                        itemStyle={{ color: '#14b8a6' }}
+                        formatter={(value, _name, props) => {
+                          const v = typeof value === 'number' ? value : 0;
+                          const count = (props?.payload as { count?: number })?.count ?? 0;
+                          return [`${v.toFixed(1)}% (${count} conversations)`, 'Avg Score'];
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="score"
+                        stroke="#14b8a6"
+                        strokeWidth={2}
+                        fill="url(#qaScoreGradient)"
+                        dot={{ r: 4, fill: '#14b8a6', strokeWidth: 0 }}
+                        activeDot={{ r: 6, fill: '#14b8a6', stroke: '#0f1d32', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -139,6 +212,60 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
+
+              {/* Accuracy by Difficulty */}
+              {metrics.evaluation.by_difficulty && Object.keys(metrics.evaluation.by_difficulty).length > 0 && (
+                <div className="mt-6 border-t border-white/[0.06] pt-6">
+                  <h3 className="mb-4 text-sm font-semibold text-slate-300">Accuracy by Difficulty</h3>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {(['Easy', 'Medium', 'Hard'] as const).map((level) => {
+                      const data = metrics.evaluation!.by_difficulty?.[level];
+                      if (!data) return null;
+                      const gradients: Record<string, string> = {
+                        Easy: 'from-emerald-500/20 to-green-500/10',
+                        Medium: 'from-amber-500/20 to-yellow-500/10',
+                        Hard: 'from-red-500/20 to-rose-500/10',
+                      };
+                      const barColors: Record<string, string> = {
+                        Easy: '[&>div]:from-emerald-500 [&>div]:to-green-400',
+                        Medium: '[&>div]:from-amber-500 [&>div]:to-yellow-400',
+                        Hard: '[&>div]:from-red-500 [&>div]:to-rose-400',
+                      };
+                      return (
+                        <div
+                          key={level}
+                          className={`rounded-lg border border-white/[0.06] bg-gradient-to-br ${gradients[level]} p-4`}
+                        >
+                          <div className="mb-3 flex items-center justify-between">
+                            <span className="text-sm font-semibold text-white">{level}</span>
+                            <span className="text-xs text-slate-400">{data.count} questions</span>
+                          </div>
+                          <div className="space-y-3">
+                            {[
+                              { label: 'Classification', value: data.classification_correct },
+                              { label: 'Hit@1', value: data.hit_at_1 },
+                              { label: 'Hit@5', value: data.hit_at_5 },
+                            ].map(({ label, value }) => (
+                              <div key={label}>
+                                <div className="mb-1 flex items-center justify-between">
+                                  <span className="text-xs text-slate-400">{label}</span>
+                                  <span className="text-xs font-bold text-white">
+                                    {(value * 100).toFixed(1)}%
+                                  </span>
+                                </div>
+                                <Progress
+                                  value={value * 100}
+                                  className={`h-1.5 bg-white/[0.06] [&>div]:bg-gradient-to-r ${barColors[level]}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}

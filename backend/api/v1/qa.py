@@ -1,6 +1,8 @@
 """QA scoring endpoints — score conversations and list results."""
 
+import asyncio
 import json
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,75 +10,170 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents import AgentMessage, QAScoringAgent
+from agents.qa_scoring import extract_red_flags, parse_score_pct
 from api.v1.auth import get_current_user
 from api.v1.schemas.qa import (
-    CategoryScore,
     PaginatedQAResponse,
+    QADetailResponse,
     QAScoreListItem,
-    QAScoreResponse,
+    ScoreAllResponse,
 )
 from vector_db.database import get_db
 from vector_db.models.conversation import Conversation
 from vector_db.models.ticket import Ticket
 from vector_db.models.user import User
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
+SCORE_ALL_CONCURRENCY = 5
 
-@router.post("/score/{conversation_id}", response_model=QAScoreResponse)
+
+async def _score_single(
+    conv: Conversation,
+    ticket: Ticket | None,
+    agent: QAScoringAgent,
+) -> dict | None:
+    """Run QA scoring on a single conversation. Returns parsed scores or None on error."""
+    try:
+        input_data = json.dumps(
+            {
+                "transcript": conv.transcript or "",
+                "resolution": ticket.resolution if ticket else "",
+                "description": ticket.description if ticket else "",
+                "category": ticket.category if ticket else "",
+                "priority": ticket.priority if ticket else "",
+                "module": ticket.module if ticket else "",
+                "product": ticket.product if ticket else "",
+                "root_cause": ticket.root_cause if ticket else "",
+                "kb_article_id": ticket.kb_article_id if ticket else "",
+                "script_id": ticket.script_id if ticket else "",
+            }
+        )
+        result = await agent.run([AgentMessage(role="user", content=input_data)])
+        return json.loads(result.content)
+    except Exception:
+        logger.exception("QA scoring failed for %s", conv.id)
+        return None
+
+
+def _store_scores(conv: Conversation, scores: dict) -> None:
+    """Store QA scores on a conversation record."""
+    overall = parse_score_pct(scores.get("Overall_Weighted_Score"))
+    red_flags = extract_red_flags(scores)
+
+    conv.qa_score = overall
+    conv.qa_scores_json = json.dumps(scores)
+    conv.qa_red_flags = ",".join(red_flags)
+    conv.qa_scored_at = datetime.now(UTC)
+
+
+@router.post("/score/{conversation_id}", response_model=QADetailResponse)
 async def score_conversation(
     conversation_id: str,
     _current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> QAScoreResponse:
+) -> QADetailResponse:
     """Run QA scoring on a conversation."""
     conv = await db.get(Conversation, conversation_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     ticket = await db.get(Ticket, conv.ticket_id)
-    resolution = ticket.resolution if ticket else ""
-    category = ticket.category if ticket else ""
-    priority = ticket.priority if ticket else ""
-
     agent = QAScoringAgent()
-    input_data = json.dumps(
-        {
-            "transcript": conv.transcript or "",
-            "resolution": resolution or "",
-            "category": category or "",
-            "priority": priority or "",
-        }
-    )
+    scores = await _score_single(conv, ticket, agent)
 
-    result = await agent.run([AgentMessage(role="user", content=input_data)])
-    scores = json.loads(result.content)
+    if scores is None:
+        raise HTTPException(status_code=500, detail="QA scoring failed")
 
-    # Store on conversation
-    now = datetime.now(UTC)
-    conv.qa_score = scores.get("overall_score")
-    conv.qa_scores_json = result.content
-    conv.qa_red_flags = ",".join(scores.get("red_flags", []))
-    conv.qa_scored_at = now
+    _store_scores(conv, scores)
     await db.flush()
 
-    categories = {}
-    for key, val in scores.get("categories", {}).items():
-        if isinstance(val, dict):
-            categories[key] = CategoryScore(
-                score=val.get("score", 0),
-                weight=val.get("weight", 0),
-                feedback=val.get("feedback", ""),
-            )
+    red_flags = extract_red_flags(scores)
 
-    return QAScoreResponse(
+    return QADetailResponse(
         conversation_id=conversation_id,
-        overall_score=scores.get("overall_score"),
-        categories=categories,
-        red_flags=scores.get("red_flags", []),
-        summary=scores.get("summary", ""),
-        scored_at=now,
+        overall_score=conv.qa_score,
+        scores_json=scores,
+        red_flags=red_flags,
+        transcript=conv.transcript,
+        scored_at=conv.qa_scored_at,
     )
+
+
+@router.post("/score-all", response_model=ScoreAllResponse)
+async def score_all_conversations(
+    limit: int = Query(50, ge=1, le=200),
+    _current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ScoreAllResponse:
+    """Score all unscored conversations (up to limit)."""
+    # Get unscored conversations
+    unscored_q = (
+        select(Conversation)
+        .where(Conversation.qa_scored_at.is_(None))
+        .order_by(Conversation.id)
+        .limit(limit)
+    )
+    unscored = (await db.execute(unscored_q)).scalars().all()
+
+    if not unscored:
+        # Check remaining
+        remaining_count = (
+            await db.execute(
+                select(func.count()).select_from(
+                    select(Conversation)
+                    .where(Conversation.qa_scored_at.is_(None))
+                    .subquery()
+                )
+            )
+        ).scalar() or 0
+        return ScoreAllResponse(scored=0, errors=0, remaining=remaining_count)
+
+    # Pre-fetch all tickets
+    ticket_ids = {c.ticket_id for c in unscored}
+    tickets_q = select(Ticket).where(Ticket.id.in_(ticket_ids))
+    tickets_map = {
+        t.id: t for t in (await db.execute(tickets_q)).scalars().all()
+    }
+
+    # Score concurrently with semaphore
+    agent = QAScoringAgent()
+    semaphore = asyncio.Semaphore(SCORE_ALL_CONCURRENCY)
+
+    async def _limited_score(conv: Conversation) -> tuple[Conversation, dict | None]:
+        async with semaphore:
+            ticket = tickets_map.get(conv.ticket_id)
+            scores = await _score_single(conv, ticket, agent)
+            return conv, scores
+
+    tasks = [_limited_score(c) for c in unscored]
+    results = await asyncio.gather(*tasks)
+
+    scored = 0
+    errors = 0
+    for conv, scores in results:
+        if scores is not None:
+            _store_scores(conv, scores)
+            scored += 1
+        else:
+            errors += 1
+
+    await db.flush()
+
+    # Count remaining unscored
+    remaining_count = (
+        await db.execute(
+            select(func.count()).select_from(
+                select(Conversation)
+                .where(Conversation.qa_scored_at.is_(None))
+                .subquery()
+            )
+        )
+    ).scalar() or 0
+
+    return ScoreAllResponse(scored=scored, errors=errors, remaining=remaining_count)
 
 
 @router.get("/conversations", response_model=PaginatedQAResponse)
@@ -124,12 +221,12 @@ async def list_conversations(
     return PaginatedQAResponse(items=items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/detail/{conversation_id}", response_model=QAScoreResponse)
+@router.get("/detail/{conversation_id}", response_model=QADetailResponse)
 async def get_qa_detail(
     conversation_id: str,
     _current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> QAScoreResponse:
+) -> QADetailResponse:
     """Get stored QA score detail for a conversation (without re-scoring)."""
     conv = await db.get(Conversation, conversation_id)
     if not conv:
@@ -138,21 +235,14 @@ async def get_qa_detail(
         raise HTTPException(status_code=404, detail="Conversation has not been scored yet")
 
     scores = json.loads(conv.qa_scores_json) if conv.qa_scores_json else {}
-    categories = {}
-    for key, val in scores.get("categories", {}).items():
-        if isinstance(val, dict):
-            categories[key] = CategoryScore(
-                score=val.get("score", 0),
-                weight=val.get("weight", 0),
-                feedback=val.get("feedback", ""),
-            )
+    red_flags = extract_red_flags(scores) if scores else []
 
-    return QAScoreResponse(
+    return QADetailResponse(
         conversation_id=conversation_id,
         overall_score=conv.qa_score,
-        categories=categories,
-        red_flags=scores.get("red_flags", []),
-        summary=scores.get("summary", ""),
+        scores_json=scores,
+        red_flags=red_flags,
+        transcript=conv.transcript,
         scored_at=conv.qa_scored_at,
     )
 
