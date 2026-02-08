@@ -162,6 +162,13 @@ function CopilotContent() {
               </div>
             )}
           </div>
+
+          {/* Research full report — below search bar in left column */}
+          {showFullReport && (
+            <div className="mt-8">
+              <ResearchReportView response={researchResponse} visible={resultsVisible} />
+            </div>
+          )}
         </div>
 
         {/* Right column: classification badge + result cards */}
@@ -192,13 +199,6 @@ function CopilotContent() {
           </div>
         )}
       </div>
-
-      {/* Research full report — full width below two-column area */}
-      {showFullReport && (
-        <div className="mt-8">
-          <ResearchReportView response={researchResponse} visible={resultsVisible} />
-        </div>
-      )}
     </div>
   );
 }
