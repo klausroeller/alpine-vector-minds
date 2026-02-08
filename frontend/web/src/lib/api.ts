@@ -416,6 +416,23 @@ export const api = {
     });
   },
 
+  getQADetail: async (conversationId: string): Promise<QAScoreResponse> => {
+    return request<QAScoreResponse>(`/api/v1/qa/detail/${conversationId}`);
+  },
+
+  listConversations: async (params: {
+    scored?: boolean;
+    page?: number;
+    page_size?: number;
+  } = {}): Promise<PaginatedResponse<QAScoreListItem>> => {
+    const searchParams = new URLSearchParams();
+    if (params.scored !== undefined) searchParams.set('scored', String(params.scored));
+    if (params.page) searchParams.set('page', String(params.page));
+    if (params.page_size) searchParams.set('page_size', String(params.page_size));
+    const qs = searchParams.toString();
+    return request<PaginatedResponse<QAScoreListItem>>(`/api/v1/qa/conversations${qs ? `?${qs}` : ''}`);
+  },
+
   listQAScores: async (params: {
     min_score?: number;
     has_red_flags?: boolean;
