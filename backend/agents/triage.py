@@ -112,7 +112,7 @@ class TriageAgent(BaseAgent):
                     {"role": "user", "content": question},
                 ],
                 temperature=0.0,
-                max_tokens=200,
+                max_completion_tokens=200,
             )
             raw = completion.choices[0].message.content or "{}"
             raw = strip_markdown_fences(raw)

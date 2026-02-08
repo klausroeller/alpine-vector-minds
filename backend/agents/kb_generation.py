@@ -82,7 +82,7 @@ class KBGenerationAgent(BaseAgent):
                     {"role": "user", "content": user_message},
                 ],
                 temperature=0.3,
-                max_tokens=1500,
+                max_completion_tokens=1500,
             )
             raw = completion.choices[0].message.content or "{}"
             raw = strip_markdown_fences(raw)
