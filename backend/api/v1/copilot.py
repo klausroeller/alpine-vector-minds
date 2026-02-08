@@ -169,6 +169,7 @@ async def copilot_evaluate(
             index=index,
             question_id=str(q.id),
             answer_type=answer_type,
+            difficulty=q.difficulty,
             classified_type=classified_type,
             classification_correct=classification_correct,
             target_id=q.target_id,
@@ -185,5 +186,6 @@ async def copilot_evaluate(
             index=index,
             question_id=str(q.id),
             answer_type=answer_type,
+            difficulty=q.difficulty,
             error=True,
         )

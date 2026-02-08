@@ -37,6 +37,12 @@ def parse_args() -> argparse.Namespace:
         default=100,
         help="Maximum number of questions to evaluate (default: 100)",
     )
+    parser.add_argument(
+        "--start",
+        type=int,
+        default=0,
+        help="0-based question index to start evaluation from (default: 0)",
+    )
     return parser.parse_args()
 
 
@@ -82,13 +88,16 @@ def print_progress(index: int, total: int) -> None:
     sys.stdout.flush()
 
 
-def run_evaluation(client: httpx.Client, base_url: str, token: str, limit: int) -> list[dict]:
+def run_evaluation(
+    client: httpx.Client, base_url: str, token: str, limit: int, start: int = 0
+) -> list[dict]:
     """Call the per-question evaluation endpoint in a loop, returning all step results."""
     headers = {"Authorization": f"Bearer {token}"}
     results = []
-    index = 0
+    index = start
+    end = start + limit
 
-    while index < limit:
+    while index < end:
         resp = client.get(
             f"{base_url}/api/v1/copilot/evaluate",
             params={"index": index},
@@ -102,11 +111,13 @@ def run_evaluation(client: httpx.Client, base_url: str, token: str, limit: int) 
         step = resp.json()
 
         if step.get("done"):
-            print_progress(step["total"], step["total"])
+            total = step["total"]
+            evaluated = min(total, end) - start
+            print_progress(evaluated, evaluated)
             break
 
         results.append(step)
-        print_progress(index + 1, min(step["total"], limit))
+        print_progress(index - start + 1, min(step["total"] - start, limit))
         index += 1
 
     print()  # newline after progress bar
@@ -124,6 +135,7 @@ def aggregate_results(steps: list[dict]) -> dict:
     errors = 0
 
     type_stats: dict[str, dict] = {}
+    difficulty_stats: dict[str, dict] = {}
 
     for s in steps:
         if s.get("error"):
@@ -131,12 +143,24 @@ def aggregate_results(steps: list[dict]) -> dict:
             continue
 
         answer_type = s.get("answer_type") or "UNKNOWN"
+        difficulty = s.get("difficulty") or "UNKNOWN"
+
         if answer_type not in type_stats:
             type_stats[answer_type] = {"count": 0, "hit_at_1": 0, "hit_at_3": 0}
         type_stats[answer_type]["count"] += 1
 
+        if difficulty not in difficulty_stats:
+            difficulty_stats[difficulty] = {
+                "count": 0,
+                "hit_at_1": 0,
+                "hit_at_3": 0,
+                "classification_correct": 0,
+            }
+        difficulty_stats[difficulty]["count"] += 1
+
         if s.get("classification_correct"):
             correct_classifications += 1
+            difficulty_stats[difficulty]["classification_correct"] += 1
 
         if s.get("target_id"):
             questions_with_targets += 1
@@ -146,10 +170,13 @@ def aggregate_results(steps: list[dict]) -> dict:
                 hit_at_5 += 1
                 type_stats[answer_type]["hit_at_1"] += 1
                 type_stats[answer_type]["hit_at_3"] += 1
+                difficulty_stats[difficulty]["hit_at_1"] += 1
+                difficulty_stats[difficulty]["hit_at_3"] += 1
             elif s.get("hit_at_3"):
                 hit_at_3 += 1
                 hit_at_5 += 1
                 type_stats[answer_type]["hit_at_3"] += 1
+                difficulty_stats[difficulty]["hit_at_3"] += 1
             elif s.get("hit_at_5"):
                 hit_at_5 += 1
 
@@ -163,6 +190,16 @@ def aggregate_results(steps: list[dict]) -> dict:
             "hit_at_3": stats["hit_at_3"] / count if count > 0 else 0.0,
         }
 
+    by_difficulty = {}
+    for diff, stats in difficulty_stats.items():
+        count = stats["count"]
+        by_difficulty[diff] = {
+            "count": count,
+            "classification_correct": stats["classification_correct"] / count if count > 0 else 0.0,
+            "hit_at_1": stats["hit_at_1"] / count if count > 0 else 0.0,
+            "hit_at_3": stats["hit_at_3"] / count if count > 0 else 0.0,
+        }
+
     return {
         "total_questions": total,
         "classification_accuracy": correct_classifications / non_error if non_error > 0 else 0.0,
@@ -172,6 +209,7 @@ def aggregate_results(steps: list[dict]) -> dict:
             "hit_at_5": hit_at_5 / questions_with_targets if questions_with_targets > 0 else 0.0,
         },
         "by_answer_type": by_answer_type,
+        "by_difficulty": by_difficulty,
         "errors": errors,
         "evaluated_at": datetime.now(UTC).isoformat(),
     }
@@ -209,6 +247,18 @@ def generate_markdown(data: dict, env: str, base_url: str) -> str:
             f"| {answer_type:<18} | {stats['count']:>5} | {pct(stats['hit_at_1']):>5} | {pct(stats['hit_at_3']):>5} |"
         )
     lines.append("")
+
+    lines.extend([
+        "## By Difficulty",
+        "",
+        "| Difficulty         | Count | Classification | Hit@1 | Hit@3 |",
+        "|--------------------|-------|----------------|-------|-------|",
+    ])
+    for difficulty, stats in sorted(data.get("by_difficulty", {}).items()):
+        lines.append(
+            f"| {difficulty:<18} | {stats['count']:>5} | {pct(stats['classification_correct']):>14} | {pct(stats['hit_at_1']):>5} | {pct(stats['hit_at_3']):>5} |"
+        )
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -217,13 +267,13 @@ def main() -> None:
     base_url = resolve_base_url(args)
     email, password = resolve_credentials(args)
 
-    print(f"Evaluating {args.env} at {base_url} (limit: {args.limit})")
+    print(f"Evaluating {args.env} at {base_url} (start: {args.start}, limit: {args.limit})")
 
     with httpx.Client() as client:
         print("Authenticating...")
         token = authenticate(client, base_url, email, password)
 
-        steps = run_evaluation(client, base_url, token, args.limit)
+        steps = run_evaluation(client, base_url, token, args.limit, start=args.start)
 
     if not steps:
         print("No questions evaluated.")

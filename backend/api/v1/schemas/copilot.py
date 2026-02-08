@@ -55,6 +55,7 @@ class EvaluationStepResponse(BaseModel):
     index: int | None = None
     question_id: str | None = None
     answer_type: str | None = None
+    difficulty: str | None = None
     classified_type: str | None = None
     classification_correct: bool | None = None
     target_id: str | None = None
