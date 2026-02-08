@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents import AgentMessage, QAScoringAgent
-from agents.qa_scoring import extract_red_flags, parse_score_pct
+from agents.qa_scoring import compute_overall_score, extract_red_flags, parse_score_pct
 from api.v1.auth import get_current_user
 from api.v1.schemas.qa import (
     PaginatedQAResponse,
@@ -59,11 +59,24 @@ async def _score_single(
 
 
 def _store_scores(conv: Conversation, scores: dict) -> None:
-    """Store QA scores on a conversation record."""
-    overall = parse_score_pct(scores.get("Overall_Weighted_Score"))
+    """Store QA scores on a conversation record.
+
+    Computes the overall score server-side from individual parameter values
+    rather than trusting the LLM's self-reported aggregate.
+    """
+    computed = compute_overall_score(scores)
+    llm_reported = parse_score_pct(scores.get("Overall_Weighted_Score"))
     red_flags = extract_red_flags(scores)
 
-    conv.qa_score = overall
+    if computed is not None and llm_reported is not None and abs(computed - llm_reported) > 5:
+        logger.warning(
+            "QA score mismatch for %s: computed=%.1f, llm_reported=%.1f",
+            conv.id,
+            computed,
+            llm_reported,
+        )
+
+    conv.qa_score = computed if computed is not None else llm_reported
     conv.qa_scores_json = json.dumps(scores)
     conv.qa_red_flags = ",".join(red_flags)
     conv.qa_scored_at = datetime.now(UTC)

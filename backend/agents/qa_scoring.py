@@ -192,6 +192,94 @@ Respond ONLY with valid JSON (no markdown fences, no commentary). Use the exact 
 """
 
 
+INTERACTION_QA_PARAMS = [
+    "Conversational_Professional",
+    "Engagement_Personalization",
+    "Tone_Pace",
+    "Language",
+    "Objection_Handling_Conversation_Control",
+    "Delivered_Expected_Outcome",
+    "Exhibit_Critical_Thinking",
+    "Educate_Accurately_Handle_Information",
+    "Effective_Use_of_Resources",
+    "Call_Case_Control_Timeliness",
+]
+
+CASE_QA_PARAMS = [
+    "Clear_Problem_Summary",
+    "Captured_Key_Context",
+    "Action_Log_Completeness",
+    "Correct_Categorization",
+    "Customer_Facing_Clarity",
+    "Resolution_Specific_Reproducible",
+    "Uses_Approved_Process_Scripts_When_Required",
+    "Accuracy_of_Technical_Content",
+    "References_Knowledge_Correctly",
+    "Timeliness_Ownership_Signals",
+]
+
+INTERACTION_WEIGHT = 0.70
+CASE_WEIGHT = 0.30
+
+
+def _section_score(section: dict, params: list[str]) -> float | None:
+    """Compute a section score from individual Yes/No/N/A parameter values.
+
+    Returns a float 0-100 or None if no scorable parameters exist.
+    Each applicable (non-N/A) parameter has equal weight.
+    """
+    yes_count = 0
+    applicable_count = 0
+    for param in params:
+        entry = section.get(param, {})
+        if not isinstance(entry, dict):
+            continue
+        score = str(entry.get("score", "")).strip().lower()
+        if score in ("yes", "no"):
+            applicable_count += 1
+            if score == "yes":
+                yes_count += 1
+        # N/A params are excluded from the denominator
+    if applicable_count == 0:
+        return None
+    return (yes_count / applicable_count) * 100
+
+
+def compute_overall_score(data: dict) -> float | None:
+    """Compute the overall QA score server-side from individual parameter values.
+
+    Applies the same rules as the prompt:
+    - Both tracks: 70% Interaction + 30% Case
+    - Single track: 100% of that track
+    - Autozero if Delivered_Expected_Outcome = "No" (interaction becomes 0%)
+    - Autozero if any red flag = "Yes" (overall becomes 0%)
+    """
+    # Check red flags first — any "Yes" means autozero
+    red_flags = data.get("Red_Flags", {})
+    for val in red_flags.values():
+        if isinstance(val, dict) and str(val.get("score", "")).strip().lower() == "yes":
+            return 0.0
+
+    interaction_section = data.get("Interaction_QA", {})
+    case_section = data.get("Case_QA", {})
+
+    interaction_score = _section_score(interaction_section, INTERACTION_QA_PARAMS)
+    case_score = _section_score(case_section, CASE_QA_PARAMS)
+
+    # Autozero: if Delivered_Expected_Outcome is "No", interaction score becomes 0%
+    deo = interaction_section.get("Delivered_Expected_Outcome", {})
+    if isinstance(deo, dict) and str(deo.get("score", "")).strip().lower() == "no":
+        interaction_score = 0.0
+
+    if interaction_score is not None and case_score is not None:
+        return interaction_score * INTERACTION_WEIGHT + case_score * CASE_WEIGHT
+    if interaction_score is not None:
+        return interaction_score
+    if case_score is not None:
+        return case_score
+    return None
+
+
 def parse_score_pct(value: str | int | float | None) -> float | None:
     """Parse 'XX%' or numeric to a float 0-100."""
     if value is None:
