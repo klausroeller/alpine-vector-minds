@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from vector_db.database import Base
@@ -24,3 +24,9 @@ class Conversation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
+
+    # QA scoring fields
+    qa_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    qa_scores_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    qa_red_flags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    qa_scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

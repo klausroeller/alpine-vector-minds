@@ -78,17 +78,19 @@ class GapDetectionAgent(BaseAgent):
         # Step 3: Check similarity threshold
         if best_match and best_match["similarity_score"] >= self.gap_threshold:
             return AgentResponse(
-                content=json.dumps({
-                    "gap_detected": False,
-                    "gap_description": (
-                        f"Existing KB article '{best_match['title']}' "
-                        f"(similarity: {best_match['similarity_score']:.3f}) "
-                        f"covers this scenario."
-                    ),
-                    "suggested_title": None,
-                    "best_match_id": best_match["id"],
-                    "best_match_similarity": best_match["similarity_score"],
-                }),
+                content=json.dumps(
+                    {
+                        "gap_detected": False,
+                        "gap_description": (
+                            f"Existing KB article '{best_match['title']}' "
+                            f"(similarity: {best_match['similarity_score']:.3f}) "
+                            f"covers this scenario."
+                        ),
+                        "suggested_title": None,
+                        "best_match_id": best_match["id"],
+                        "best_match_similarity": best_match["similarity_score"],
+                    }
+                ),
                 metadata={
                     "ticket_id": ticket_id,
                     "threshold": self.gap_threshold,
@@ -115,13 +117,15 @@ class GapDetectionAgent(BaseAgent):
         similarity = best_match["similarity_score"] if best_match else 0.0
 
         return AgentResponse(
-            content=json.dumps({
-                "gap_detected": gap_result["gap_detected"],
-                "gap_description": gap_result.get("gap_description", ""),
-                "suggested_title": gap_result.get("suggested_title"),
-                "best_match_id": best_match["id"] if best_match else None,
-                "best_match_similarity": similarity,
-            }),
+            content=json.dumps(
+                {
+                    "gap_detected": gap_result["gap_detected"],
+                    "gap_description": gap_result.get("gap_description", ""),
+                    "suggested_title": gap_result.get("suggested_title"),
+                    "best_match_id": best_match["id"] if best_match else None,
+                    "best_match_similarity": similarity,
+                }
+            ),
             metadata={
                 "ticket_id": ticket_id,
                 "threshold": self.gap_threshold,

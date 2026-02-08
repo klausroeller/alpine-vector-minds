@@ -90,9 +90,7 @@ def print_progress(index: int, total: int) -> None:
     sys.stdout.flush()
 
 
-async def _fetch_one(
-    client: httpx.AsyncClient, base_url: str, headers: dict, index: int
-) -> dict:
+async def _fetch_one(client: httpx.AsyncClient, base_url: str, headers: dict, index: int) -> dict:
     """Fetch a single evaluation step."""
     resp = await client.get(
         f"{base_url}/api/v1/copilot/evaluate",
@@ -270,12 +268,14 @@ def generate_markdown(data: dict, env: str, base_url: str) -> str:
         )
     lines.append("")
 
-    lines.extend([
-        "## By Difficulty",
-        "",
-        "| Difficulty         | Count | Classification | Hit@1 | Hit@5 |",
-        "|--------------------|-------|----------------|-------|-------|",
-    ])
+    lines.extend(
+        [
+            "## By Difficulty",
+            "",
+            "| Difficulty         | Count | Classification | Hit@1 | Hit@5 |",
+            "|--------------------|-------|----------------|-------|-------|",
+        ]
+    )
     for difficulty, stats in sorted(data.get("by_difficulty", {}).items()):
         lines.append(
             f"| {difficulty:<18} | {stats['count']:>5} | {pct(stats['classification_correct']):>14} | {pct(stats['hit_at_1']):>5} | {pct(stats['hit_at_5']):>5} |"
@@ -316,6 +316,35 @@ async def async_main() -> None:
     md_content = generate_markdown(data, args.env, base_url)
     md_path.write_text(md_content)
     print(f"Markdown report saved to {md_path}")
+
+    # Store results in database (best-effort)
+    try:
+        ra = data["retrieval_accuracy"]
+        payload = {
+            "total_questions": data["total_questions"],
+            "classification_accuracy": data["classification_accuracy"],
+            "hit_at_1": ra["hit_at_1"],
+            "hit_at_5": ra["hit_at_5"],
+            "hit_at_10": ra["hit_at_10"],
+            "by_answer_type": data.get("by_answer_type"),
+            "by_difficulty": data.get("by_difficulty"),
+            "errors": data.get("errors", 0),
+            "evaluated_at": data["evaluated_at"],
+        }
+        async with httpx.AsyncClient() as post_client:
+            post_token = await authenticate(post_client, base_url, email, password)
+            resp = await post_client.post(
+                f"{base_url}/api/v1/evaluation/results",
+                json=payload,
+                headers={"Authorization": f"Bearer {post_token}"},
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                print("Evaluation results stored in database.")
+            else:
+                print(f"Warning: Failed to store results ({resp.status_code})")
+    except Exception as exc:
+        print(f"Warning: Could not store evaluation results: {exc}")
 
     # Print summary
     print()

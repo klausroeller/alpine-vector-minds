@@ -117,10 +117,12 @@ class KBGenerationAgent(BaseAgent):
         script_title = data.get("script_title")
         script_id = data.get("script_id")
         if script_title:
-            parts.extend([
-                "",
-                f"Tier 3 Script Used: {script_title} ({script_id or 'N/A'})",
-            ])
+            parts.extend(
+                [
+                    "",
+                    f"Tier 3 Script Used: {script_title} ({script_id or 'N/A'})",
+                ]
+            )
 
         suggested = data.get("suggested_title")
         if suggested:
@@ -135,8 +137,5 @@ class KBGenerationAgent(BaseAgent):
         resolution = data.get("ticket_resolution", "")
 
         title = data.get("suggested_title") or f"Resolving {category} Issues"
-        body = (
-            f"Problem Description:\n{description}\n\n"
-            f"Resolution:\n{resolution}"
-        )
+        body = f"Problem Description:\n{description}\n\nResolution:\n{resolution}"
         return {"title": title, "body": body, "category": category}

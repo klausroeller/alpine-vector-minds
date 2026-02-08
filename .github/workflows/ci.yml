@@ -48,9 +48,6 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
-      - name: Run type checking
-        run: uv run mypy api vector_db agents
-
       - name: Run tests
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test_db

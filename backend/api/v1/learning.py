@@ -180,9 +180,7 @@ async def detect_gap(
         )
 
     # Fetch linked conversation
-    conv_result = await db.execute(
-        select(Conversation).where(Conversation.ticket_id == ticket.id)
-    )
+    conv_result = await db.execute(select(Conversation).where(Conversation.ticket_id == ticket.id))
     conversation = conv_result.scalar_one_or_none()
 
     # Fetch linked script (if any)
@@ -196,16 +194,16 @@ async def detect_gap(
     search_service = VectorSearchService(db)
     gap_agent = GapDetectionAgent(db, embedding_service, search_service)
 
-    gap_input = json.dumps({
-        "ticket_description": ticket.description or "",
-        "ticket_resolution": ticket.resolution or "",
-        "ticket_category": ticket.category or "",
-        "ticket_id": ticket.id,
-    })
-
-    gap_response = await gap_agent.run(
-        [AgentMessage(role="user", content=gap_input)]
+    gap_input = json.dumps(
+        {
+            "ticket_description": ticket.description or "",
+            "ticket_resolution": ticket.resolution or "",
+            "ticket_category": ticket.category or "",
+            "ticket_id": ticket.id,
+        }
     )
+
+    gap_response = await gap_agent.run([AgentMessage(role="user", content=gap_input)])
     gap_data = json.loads(gap_response.content)
 
     if not gap_data.get("gap_detected", False):
