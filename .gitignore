@@ -225,3 +225,6 @@ backups/
 /data/
 !/data/.git.keep
 /scratch/
+
+# Submission artifacts
+submission/
