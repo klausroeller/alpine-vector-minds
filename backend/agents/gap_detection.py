@@ -160,7 +160,11 @@ class GapDetectionAgent(BaseAgent):
             )
             raw = completion.choices[0].message.content or "{}"
             raw = strip_markdown_fences(raw)
-            return json.loads(raw)
+            result = json.loads(raw)
+            if "gap_detected" not in result:
+                logger.warning("LLM response missing 'gap_detected' key: %s", raw)
+                result["gap_detected"] = True
+            return result
         except Exception:
             logger.exception("LLM gap confirmation failed, assuming gap exists")
             return {
