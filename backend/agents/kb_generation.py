@@ -83,7 +83,15 @@ class KBGenerationAgent(BaseAgent):
                 ],
                 max_completion_tokens=1500,
             )
-            raw = completion.choices[0].message.content or "{}"
+            choice = completion.choices[0]
+            if not choice.message.content:
+                logger.warning(
+                    "LLM returned empty content for KB generation "
+                    "(finish_reason=%s, refusal=%s)",
+                    choice.finish_reason,
+                    getattr(choice.message, "refusal", None),
+                )
+            raw = choice.message.content or "{}"
             raw = strip_markdown_fences(raw)
             parsed = json.loads(raw)
             return {
