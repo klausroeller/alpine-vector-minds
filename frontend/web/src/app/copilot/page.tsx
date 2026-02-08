@@ -88,8 +88,18 @@ function CopilotContent() {
   // Research response that fell back to simple mode
   const researchSimple = researchResponse?.mode === 'simple';
 
+  // Right-column data: result cards + classification badge
+  const rightColumnResults = hasQuickResponse
+    ? response.results
+    : (hasResearchResponse && researchSimple && researchResponse.results) ? researchResponse.results : [];
+  const rightColumnClassification = hasQuickResponse
+    ? response.classification
+    : (hasResearchResponse && researchSimple) ? researchResponse.classification : null;
+  const hasResultCards = rightColumnResults.length > 0;
+  const showFullReport = hasResearchResponse && !researchSimple;
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
+    <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-white">
           Copilot
@@ -99,106 +109,96 @@ function CopilotContent() {
         </p>
       </div>
 
-      {/* Search bar */}
-      <SearchBar
-        value={query}
-        onChange={setQuery}
-        onSubmit={handleSubmit}
-        loading={loading}
-        mode={mode}
-        onModeChange={setMode}
-      />
+      {/* Two-column layout: left (search + AI answer) / right (result cards) */}
+      <div className="flex flex-col lg:flex-row lg:gap-8">
+        {/* Left column */}
+        <div className="flex-1 min-w-0">
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            onSubmit={handleSubmit}
+            loading={loading}
+            mode={mode}
+            onModeChange={setMode}
+          />
 
-      {/* Results area */}
-      <div className="mt-8">
-        {error && (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
-            {error}
-          </div>
-        )}
+          <div className="mt-8 space-y-6">
+            {error && (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+                {error}
+              </div>
+            )}
 
-        {/* Quick search results */}
-        {hasQuickResponse && (
-          <div className="space-y-6">
-            <ClassificationBadge
-              classification={response.classification}
-              visible={resultsVisible}
-            />
-
-            {/* AI Answer */}
-            {response.ai_answer && (
+            {/* AI Answer (quick search only) */}
+            {hasQuickResponse && response.ai_answer && (
               <AIAnswerCard answer={response.ai_answer} visible={resultsVisible} />
             )}
-            {response.results.length === 0 ? (
+
+            {/* No results message */}
+            {hasQuickResponse && response.results.length === 0 && (
               <p className="text-sm text-slate-500">
                 No results found. Try rephrasing your question.
               </p>
-            ) : (
-              <div className="space-y-4">
-                {response.results.map((result, i) => (
-                  <ResultCard
-                    key={result.source_id}
-                    result={result}
-                    index={i}
-                    visible={resultsVisible}
-                    questionText={query}
-                    classification={response.classification.answer_type}
-                    feedbackGiven={feedback[result.source_id] ?? null}
-                    onFeedback={handleFeedback}
-                  />
-                ))}
-              </div>
             )}
-          </div>
-        )}
-
-        {/* Research response — simple fallback */}
-        {hasResearchResponse && researchSimple && researchResponse.classification && (
-          <div className="space-y-6">
-            <ClassificationBadge
-              classification={researchResponse.classification}
-              visible={resultsVisible}
-            />
-            {(!researchResponse.results || researchResponse.results.length === 0) ? (
+            {hasResearchResponse && researchSimple && (!researchResponse.results || researchResponse.results.length === 0) && (
               <p className="text-sm text-slate-500">
                 No results found. Try rephrasing your question.
               </p>
-            ) : (
-              <div className="space-y-4">
-                {researchResponse.results.map((result, i) => (
-                  <ResultCard
-                    key={result.source_id}
-                    result={result}
-                    index={i}
-                    visible={resultsVisible}
-                  />
-                ))}
+            )}
+
+            {/* Empty state */}
+            {!hasAnyResponse && !loading && !error && (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500/10 to-cyan-500/5 ring-1 ring-teal-500/10">
+                  <Brain className="h-7 w-7 text-teal-500/60" />
+                </div>
+                <p className="text-sm font-medium text-slate-400">
+                  Ask a question to get started
+                </p>
+                <p className="mt-1 max-w-sm text-xs text-slate-600">
+                  The copilot searches across knowledge articles, scripts, and ticket
+                  resolutions to find the most relevant answers
+                </p>
               </div>
             )}
           </div>
-        )}
+        </div>
 
-        {/* Research response — full report */}
-        {hasResearchResponse && !researchSimple && (
-          <ResearchReportView response={researchResponse} visible={resultsVisible} />
-        )}
-
-        {/* Empty state */}
-        {!hasAnyResponse && !loading && !error && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500/10 to-cyan-500/5 ring-1 ring-teal-500/10">
-              <Brain className="h-7 w-7 text-teal-500/60" />
+        {/* Right column: classification badge + result cards */}
+        {hasResultCards && (
+          <div className="mt-8 lg:mt-0 w-full lg:w-[400px] lg:shrink-0 space-y-6">
+            {rightColumnClassification && (
+              <ClassificationBadge
+                classification={rightColumnClassification}
+                visible={resultsVisible}
+              />
+            )}
+            <div className="space-y-4">
+              {rightColumnResults.map((result, i) => (
+                <ResultCard
+                  key={result.source_id}
+                  result={result}
+                  index={i}
+                  visible={resultsVisible}
+                  {...(hasQuickResponse ? {
+                    questionText: query,
+                    classification: response.classification.answer_type,
+                    feedbackGiven: feedback[result.source_id] ?? null,
+                    onFeedback: handleFeedback,
+                  } : {})}
+                />
+              ))}
             </div>
-            <p className="text-sm font-medium text-slate-400">
-              Ask a question to get started
-            </p>
-            <p className="mt-1 max-w-sm text-xs text-slate-600">
-              The copilot searches across knowledge articles, scripts, and ticket
-              resolutions to find the most relevant answers
-            </p>
           </div>
         )}
       </div>
+
+      {/* Research full report — full width below two-column area */}
+      {showFullReport && (
+        <div className="mt-8">
+          <ResearchReportView response={researchResponse} visible={resultsVisible} />
+        </div>
+      )}
     </div>
   );
 }

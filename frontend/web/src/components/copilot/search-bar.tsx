@@ -67,7 +67,7 @@ export function SearchBar({ value, onChange, onSubmit, loading, mode, onModeChan
       {/* Glow effect */}
       <div
         className={cn(
-          'absolute -inset-1 rounded-2xl opacity-60 blur-xl',
+          'pointer-events-none absolute -inset-1 rounded-2xl opacity-60 blur-xl',
           isResearch
             ? 'bg-gradient-to-r from-violet-500/20 via-purple-500/20 to-violet-500/20'
             : 'bg-gradient-to-r from-teal-500/20 via-cyan-500/20 to-teal-500/20'
