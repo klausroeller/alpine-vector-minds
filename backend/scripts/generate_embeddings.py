@@ -10,6 +10,7 @@ from vector_db.embeddings import EmbeddingService
 from vector_db.models.knowledge_article import KnowledgeArticle
 from vector_db.models.question import Question
 from vector_db.models.script import Script
+from vector_db.models.ticket import Ticket
 
 BATCH_SIZE = 100
 
@@ -66,6 +67,18 @@ def script_text(script: Script) -> str:
     return "\n".join(parts)
 
 
+def ticket_text(ticket: Ticket) -> str:
+    """Build embedding text for a ticket."""
+    parts = []
+    if ticket.description:
+        parts.append(ticket.description)
+    if ticket.resolution:
+        parts.append(ticket.resolution)
+    if ticket.root_cause:
+        parts.append(f"Root cause: {ticket.root_cause}")
+    return "\n".join(parts)
+
+
 def question_text(question: Question) -> str:
     """Build embedding text for a question."""
     return question.question_text
@@ -78,6 +91,7 @@ async def generate_all() -> None:
     print("Generating embeddings...")
     await generate_embeddings_for_table(service, KnowledgeArticle, kb_text, "Knowledge Articles")
     await generate_embeddings_for_table(service, Script, script_text, "Scripts")
+    await generate_embeddings_for_table(service, Ticket, ticket_text, "Tickets")
     await generate_embeddings_for_table(service, Question, question_text, "Questions")
     print("All embeddings generated.")
 

@@ -2,7 +2,7 @@
 
 A **self-learning support intelligence layer** for the RealPage SupportMind AI hackathon challenge. Two hero features:
 
-1. **Intelligent Triage Copilot** — Classify support questions, retrieve best-match answers via vector search with full provenance
+1. **Intelligent Triage Copilot** — Classify support questions, retrieve best-match answers via hybrid search (semantic + full-text with RRF), LLM query rewriting, and LLM reranking
 2. **Self-Learning Knowledge Loop** — Detect knowledge gaps from resolved tickets, auto-generate draft KB articles, human-in-the-loop review
 
 **Authors**: Dr. Volker Pernice and Dr. Klaus Röller
@@ -39,8 +39,10 @@ make seed
 
 **What `make seed` does (in order):**
 1. `make import-data` — Imports all data from `data/SupportMind__Final_Data.xlsx` into the database (3,207 KB articles, 714 scripts, 400 tickets, 1,000 questions, etc.)
-2. `make generate-embeddings` — Generates OpenAI embeddings for KB articles, scripts, and questions (~$0.06 cost)
-3. `make create-vector-indexes` — Creates IVFFlat indexes on embedding columns for fast similarity search
+2. `make migrate-ticket-embeddings` — Adds embedding column to tickets table
+3. `make generate-embeddings` — Generates OpenAI embeddings for KB articles, scripts, tickets, and questions (~$0.06 cost)
+4. `make create-vector-indexes` — Creates IVFFlat indexes on embedding columns for fast similarity search
+5. `make create-fulltext-indexes` — Creates tsvector columns and GIN indexes for full-text search
 
 > **Important**: `make seed` runs on the host via `uv run` and connects to the Dockerized DB at `localhost:5432`. The DB must be up (`make dev`) before running `make seed`.
 
@@ -86,7 +88,7 @@ Access the API docs at http://localhost:8000/docs once running.
 |-------|-------------|------------|-------------|
 | `knowledge_articles` | 3,207 | 1536-dim | KB articles (seed + auto-generated) |
 | `scripts` | 714 | 1536-dim | SQL fix scripts with placeholders |
-| `tickets` | 400 | — | Support tickets with resolution |
+| `tickets` | 400 | 1536-dim | Support tickets with resolution |
 | `conversations` | 400 | — | Chat/phone transcripts linked to tickets |
 | `questions` | 1,000 | 1536-dim | Ground-truth Q&A for evaluation |
 | `kb_lineage` | 483 | — | Provenance chain for auto-generated articles |
@@ -97,14 +99,16 @@ Access the API docs at http://localhost:8000/docs once running.
 ## Development Commands
 
 ```bash
-make install                # Install all dependencies (frontend + backend)
-make dev                    # Start all services in Docker
-make seed                   # Import data + generate embeddings + create indexes
-make import-data            # Import Excel data only
-make generate-embeddings    # Generate embeddings only
-make create-vector-indexes  # Create IVFFlat indexes only
-make lint                   # Run ruff linter + formatter check
-make test                   # Run pytest
+make install                 # Install all dependencies (frontend + backend)
+make dev                     # Start all services in Docker
+make seed                    # Full pipeline: import, migrate, embed, index (vector + FTS)
+make import-data             # Import Excel data only
+make migrate-ticket-embeddings  # Add embedding column to tickets table
+make generate-embeddings     # Generate embeddings (KB, scripts, tickets, questions)
+make create-vector-indexes   # Create IVFFlat indexes only
+make create-fulltext-indexes # Create tsvector columns + GIN indexes
+make lint                    # Run ruff linter + formatter check
+make test                    # Run pytest
 ```
 
 ## API Endpoints

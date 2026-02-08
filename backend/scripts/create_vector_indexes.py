@@ -20,6 +20,12 @@ INDEXES = [
         "lists": 20,
     },
     {
+        "name": "ix_tickets_embedding",
+        "table": "tickets",
+        "column": "embedding",
+        "lists": 10,
+    },
+    {
         "name": "ix_questions_embedding",
         "table": "questions",
         "column": "embedding",

@@ -1,10 +1,13 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from vector_db.database import Base
+
+EMBEDDING_DIMENSIONS = 1536
 
 
 class TicketStatus(StrEnum):
@@ -34,6 +37,9 @@ class Ticket(Base):
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
     root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(EMBEDDING_DIMENSIONS), nullable=True
+    )
     kb_article_id: Mapped[str | None] = mapped_column(
         String(20), ForeignKey("knowledge_articles.id"), nullable=True
     )

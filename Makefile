@@ -1,4 +1,4 @@
-.PHONY: install dev dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup import-data generate-embeddings create-vector-indexes seed seed-production evaluate
+.PHONY: install dev dev-teardown lint test create-admin infra infra-destroy deploy init-ssl production backup migrate-ticket-embeddings import-data generate-embeddings create-vector-indexes create-fulltext-indexes seed seed-production evaluate
 
 # ─── Development ────────────────────────────────────────────
 
@@ -26,6 +26,10 @@ test:
 
 # ─── Data Pipeline ─────────────────────────────────────────
 
+# Add embedding column to tickets table (idempotent)
+migrate-ticket-embeddings:
+	docker exec alpine-api uv run python -m scripts.migrate_ticket_embeddings
+
 # Import Excel data into the database
 import-data:
 	docker exec alpine-api uv run python -m scripts.import_data
@@ -38,8 +42,12 @@ generate-embeddings:
 create-vector-indexes:
 	docker exec alpine-api uv run python -m scripts.create_vector_indexes
 
-# Run full data pipeline: import, embed, index
-seed: import-data generate-embeddings create-vector-indexes
+# Create full-text search columns and GIN indexes
+create-fulltext-indexes:
+	docker exec alpine-api uv run python -m scripts.create_fulltext_indexes
+
+# Run full data pipeline: import, embed, index (vector + fulltext)
+seed: import-data migrate-ticket-embeddings generate-embeddings create-vector-indexes create-fulltext-indexes
 
 # Run full data pipeline on the production server
 seed-production:
