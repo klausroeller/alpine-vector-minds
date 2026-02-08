@@ -1,7 +1,7 @@
 import json
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.auth import get_current_user
@@ -136,9 +136,10 @@ async def get_dashboard_metrics(
             )
         ).scalar() or 0
         # Monthly average scores grouped by conversation_end month
+        month_expr = func.to_char(Conversation.conversation_end, "YYYY-MM")
         monthly_rows = await db.execute(
             select(
-                func.to_char(Conversation.conversation_end, "YYYY-MM").label("month"),
+                month_expr.label("month"),
                 func.avg(Conversation.qa_score).label("avg_score"),
                 func.count().label("cnt"),
             )
@@ -146,8 +147,8 @@ async def get_dashboard_metrics(
                 Conversation.qa_scored_at.isnot(None),
                 Conversation.conversation_end.isnot(None),
             )
-            .group_by(func.to_char(Conversation.conversation_end, "YYYY-MM"))
-            .order_by(func.to_char(Conversation.conversation_end, "YYYY-MM"))
+            .group_by(text("month"))
+            .order_by(text("month"))
         )
         monthly_scores = [
             QAMonthlyScore(month=row[0], avg_score=round(float(row[1]), 1), count=row[2])
