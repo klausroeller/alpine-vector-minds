@@ -81,7 +81,6 @@ class KBGenerationAgent(BaseAgent):
                     {"role": "system", "content": KB_GENERATION_SYSTEM_PROMPT},
                     {"role": "user", "content": user_message},
                 ],
-                temperature=0.3,
                 max_completion_tokens=1500,
             )
             raw = completion.choices[0].message.content or "{}"

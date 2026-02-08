@@ -152,7 +152,6 @@ class GapDetectionAgent(BaseAgent):
                     {"role": "system", "content": GAP_DETECTION_SYSTEM_PROMPT},
                     {"role": "user", "content": user_message},
                 ],
-                temperature=0.0,
                 max_completion_tokens=300,
             )
             raw = completion.choices[0].message.content or "{}"

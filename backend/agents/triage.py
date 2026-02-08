@@ -111,7 +111,6 @@ class TriageAgent(BaseAgent):
                     {"role": "system", "content": CLASSIFICATION_SYSTEM_PROMPT},
                     {"role": "user", "content": question},
                 ],
-                temperature=0.0,
                 max_completion_tokens=200,
             )
             raw = completion.choices[0].message.content or "{}"
