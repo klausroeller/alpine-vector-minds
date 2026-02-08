@@ -8,11 +8,13 @@ from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.base import AgentMessage, AgentResponse, BaseAgent, strip_markdown_fences
-from agents.triage import TriageAgent
+from agents.triage import TriageAgent, _secondary_pool
 from api.core.constants import (
     DEEP_RESEARCH_MAX_CONTEXT_ITEMS,
     DEEP_RESEARCH_MAX_SUB_QUERIES,
     DEEP_RESEARCH_RESULTS_PER_QUERY,
+    ENABLE_RERANKING,
+    SEARCH_RESULT_LIMIT,
 )
 from vector_db.embeddings import EmbeddingService
 from vector_db.embeddings import settings as embedding_settings
@@ -120,17 +122,21 @@ class DeepResearchAgent(BaseAgent):
                 },
             )
 
-        # Step 2: Decompose
-        sub_queries = await self._decompose(question)
-
-        # Step 3: Parallel search
-        merged_results = await self._parallel_search(sub_queries)
-
-        # Step 4: Classify (same LLM call as ask mode) + Synthesize in parallel
-        classification, report = await asyncio.gather(
+        # Step 2: Classify + Decompose in parallel (both are LLM calls)
+        classification, sub_queries = await asyncio.gather(
             self.triage_agent._classify(question),
-            self._synthesize(question, merged_results),
+            self._decompose(question),
         )
+
+        # Step 3: Parallel search (sub-queries + baseline search using classification)
+        merged_results = await self._parallel_search(sub_queries, classification)
+
+        # Step 4: LLM rerank the merged candidates
+        if ENABLE_RERANKING and merged_results:
+            merged_results = await self.triage_agent._rerank(question, merged_results)
+
+        # Step 5: Synthesize report from top results
+        report = await self._synthesize(question, merged_results[:DEEP_RESEARCH_MAX_CONTEXT_ITEMS])
 
         total_ms = (time.perf_counter() - start_time) * 1000
         result = {
@@ -204,12 +210,20 @@ class DeepResearchAgent(BaseAgent):
             logger.exception("Decomposition failed, using raw question")
             return [{"query": question, "pool": "KB", "aspect": "general search"}]
 
-    async def _parallel_search(self, sub_queries: list[dict[str, str]]) -> list[dict[str, Any]]:
-        # Batch-embed all sub-query texts in one call
+    async def _parallel_search(
+        self, sub_queries: list[dict[str, str]], classification: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        # Batch-embed all sub-query texts + the baseline search query in one call
         query_texts = [sq["query"] for sq in sub_queries]
+        baseline_query = classification.get("search_query", "")
+        query_texts.append(baseline_query)
         embeddings = await self.embedding_service.embed_batch(query_texts)
 
-        # Launch parallel hybrid searches
+        # Split embeddings: sub-query embeddings + baseline embedding
+        sub_embeddings = embeddings[:-1]
+        baseline_embedding = embeddings[-1]
+
+        # --- Sub-query searches ---
         async def _search_one(sq: dict[str, str], embedding: list[float]) -> list[dict[str, Any]]:
             answer_type = _POOL_TO_ANSWER_TYPE.get(sq["pool"], "KB")
             results, _ = await self.search_service.search_all(
@@ -218,13 +232,38 @@ class DeepResearchAgent(BaseAgent):
                 limit=DEEP_RESEARCH_RESULTS_PER_QUERY,
                 raw_question=sq["query"],
             )
-            # Tag each result with its source_type
             for r in results:
                 if "source_type" not in r:
                     r["source_type"] = answer_type
             return results
 
-        tasks = [_search_one(sq, emb) for sq, emb in zip(sub_queries, embeddings, strict=True)]
+        # --- Baseline search (same as ask mode: primary + secondary pool) ---
+        async def _baseline_search() -> list[dict[str, Any]]:
+            primary_type = classification.get("answer_type", "KB")
+            secondary_type = _secondary_pool(primary_type)
+            primary_results, _ = await self.search_service.search_all(
+                baseline_embedding,
+                answer_type=primary_type,
+                limit=SEARCH_RESULT_LIMIT,
+                raw_question=baseline_query,
+            )
+            secondary_results, _ = await self.search_service.search_all(
+                baseline_embedding,
+                answer_type=secondary_type,
+                limit=5,
+                raw_question=baseline_query,
+            )
+            for r in primary_results:
+                if "source_type" not in r:
+                    r["source_type"] = primary_type
+            for r in secondary_results:
+                if "source_type" not in r:
+                    r["source_type"] = secondary_type
+            return primary_results + secondary_results
+
+        # Launch all searches in parallel
+        tasks = [_search_one(sq, emb) for sq, emb in zip(sub_queries, sub_embeddings, strict=True)]
+        tasks.append(_baseline_search())
         all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Merge and deduplicate by id (keep highest score)
